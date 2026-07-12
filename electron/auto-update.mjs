@@ -6,6 +6,10 @@ import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STARTUP_CHECK_DELAY_MS = 6_000;
+// Grace period before quitting/installing so the UI can show the installing state.
+const INSTALL_GRACE_MS = 160;
+// Truncate scrubbed error messages so update failures stay readable.
+const ERROR_MESSAGE_MAX_LENGTH = 180;
 
 let initialized = false;
 let updateReady = false;
@@ -24,9 +28,7 @@ let updateState = {
 
 function mainWindowCanReceiveUpdates() {
   const window = getMainWindow();
-  return window && !window.isDestroyed() && !window.webContents.isDestroyed()
-    ? window
-    : null;
+  return window && !window.isDestroyed() && !window.webContents.isDestroyed() ? window : null;
 }
 
 function publishState(nextState) {
@@ -45,18 +47,16 @@ function conciseError(error) {
     .replace(/https?:\/\/\S+/g, "更新服务器")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 180);
+    .slice(0, ERROR_MESSAGE_MAX_LENGTH);
 }
 
 function hasDeveloperIdSignature() {
   if (process.platform !== "darwin") return true;
 
   const appBundlePath = path.resolve(path.dirname(process.execPath), "../..");
-  const result = spawnSync(
-    "/usr/bin/codesign",
-    ["-dv", "--verbose=4", appBundlePath],
-    { encoding: "utf8" },
-  );
+  const result = spawnSync("/usr/bin/codesign", ["-dv", "--verbose=4", appBundlePath], {
+    encoding: "utf8",
+  });
   const details = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   const teamIdentifier = details.match(/TeamIdentifier=([^\s]+)/)?.[1];
   return Boolean(teamIdentifier && teamIdentifier !== "not" && teamIdentifier !== "not-set");
@@ -91,12 +91,10 @@ async function checkForUpdates() {
 export function initializeAutoUpdates(options = {}) {
   if (initialized) return updateState;
   initialized = true;
-  getMainWindow = typeof options.getMainWindow === "function"
-    ? options.getMainWindow
-    : getMainWindow;
-  beforeInstall = typeof options.beforeInstall === "function"
-    ? options.beforeInstall
-    : beforeInstall;
+  getMainWindow =
+    typeof options.getMainWindow === "function" ? options.getMainWindow : getMainWindow;
+  beforeInstall =
+    typeof options.beforeInstall === "function" ? options.beforeInstall : beforeInstall;
 
   const support = updaterSupport();
   publishState({
@@ -188,7 +186,7 @@ export async function installDownloadedUpdate() {
   setTimeout(() => {
     if (process.platform === "win32") autoUpdater.quitAndInstall(true, true);
     else autoUpdater.quitAndInstall();
-  }, 160);
+  }, INSTALL_GRACE_MS);
 
   return { ok: true };
 }

@@ -1,6 +1,4 @@
-function getBridge() {
-  return typeof window === "undefined" ? null : window.lumaDesktop ?? null;
-}
+import { getBridge } from "./desktopBridge.js";
 
 export function getDesktopPlatform() {
   const bridge = getBridge();
@@ -59,7 +57,8 @@ export async function applyDesktopWallpaper(media, { force = false } = {}) {
 
     return {
       status: "success",
-      message: result?.message ?? (media.kind === "video" ? "动态壁纸已开始播放" : "桌面壁纸已设置"),
+      message:
+        result?.message ?? (media.kind === "video" ? "动态壁纸已开始播放" : "桌面壁纸已设置"),
     };
   } catch (error) {
     return {

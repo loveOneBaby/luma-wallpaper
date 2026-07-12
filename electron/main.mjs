@@ -10,32 +10,28 @@ import {
   stopAutoUpdates,
 } from "./auto-update.mjs";
 import { attachWindowToWorkerW } from "./windows-workerw.mjs";
+import {
+  IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+  kindFromExtension,
+} from "../shared/mediaExtensions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 
-const IMAGE_EXTENSIONS = new Set([
-  ".avif",
-  ".bmp",
-  ".gif",
-  ".heic",
-  ".heif",
-  ".jpeg",
-  ".jpg",
-  ".png",
-  ".tif",
-  ".tiff",
-  ".webp",
-]);
-const VIDEO_EXTENSIONS = new Set([
-  ".avi",
-  ".m4v",
-  ".mkv",
-  ".mov",
-  ".mp4",
-  ".webm",
-  ".wmv",
-]);
+// Wallpaper verification polling. Tried in order; once a match is seen, the
+// stability delay re-checks to catch wallpaper utilities that immediately
+// reclaim the desktop.
+const VERIFICATION_DELAYS_MS = [120, 350, 700];
+const VERIFICATION_STABILITY_DELAY_MS = 1200;
+const PLAYBACK_TIMEOUT_MS = 4000;
+const MAX_DROPPED_PATHS = 100;
+const MAIN_WINDOW_BOUNDS = {
+  width: 1280,
+  height: 820,
+  minWidth: 900,
+  minHeight: 620,
+};
 const DEMO_FILES_BY_KEY = new Map([
   ["ocean-morning-video", "ocean-morning.mp4"],
   ["ocean-morning-image", "ocean-morning.png"],
@@ -97,7 +93,7 @@ function sameFilePath(leftPath, rightPath) {
   return comparablePath(leftPath) === comparablePath(rightPath);
 }
 
-function waitForPlayback(token, timeout = 4000) {
+function waitForPlayback(token, timeout = PLAYBACK_TIMEOUT_MS) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       playbackWaiters.delete(token);
@@ -124,10 +120,7 @@ async function loadWallpaperModule() {
 }
 
 function mediaKind(filePath) {
-  const extension = path.extname(filePath).toLowerCase();
-  if (IMAGE_EXTENSIONS.has(extension)) return "image";
-  if (VIDEO_EXTENSIONS.has(extension)) return "video";
-  return null;
+  return kindFromExtension(filePath);
 }
 
 function mediaUrl(filePath) {
@@ -153,9 +146,7 @@ function mediaDescriptor(filePath) {
 
 function isMainWindowSender(event) {
   return Boolean(
-    mainWindow
-      && !mainWindow.isDestroyed()
-      && event?.sender?.id === mainWindow.webContents.id,
+    mainWindow && !mainWindow.isDestroyed() && event?.sender?.id === mainWindow.webContents.id,
   );
 }
 
@@ -177,22 +168,17 @@ function findDemoMedia(demoKey) {
   const fileName = DEMO_FILES_BY_KEY.get(String(demoKey ?? ""));
   if (!fileName) return null;
 
+  // Two supported flows: a packaged app resolves demo media from the
+  // extraResources "demo-assets" directory (process.resourcesPath); the dev
+  // workflow resolves it from the source tree. The earlier dist/assets +
+  // hashed-filename fallbacks were dead in both supported flows and have been
+  // removed — running `electron` against a built dist without electron-builder
+  // packaging is not a supported configuration.
   const directCandidates = [
     path.join(process.resourcesPath, "demo-assets", fileName),
     path.join(appRoot, "src", "assets", fileName),
-    path.join(appRoot, "dist", "assets", fileName),
   ];
-  const directMatch = directCandidates.find((candidate) => fs.existsSync(candidate));
-  if (directMatch) return directMatch;
-
-  const distAssets = path.join(appRoot, "dist", "assets");
-  if (!fs.existsSync(distAssets)) return null;
-
-  const extension = path.extname(fileName);
-  const baseName = path.basename(fileName, extension);
-  const generatedAssetPattern = new RegExp(`^${baseName}-.*\\${extension}$`, "i");
-  const generatedAsset = fs.readdirSync(distAssets).find((name) => generatedAssetPattern.test(name));
-  return generatedAsset ? path.join(distAssets, generatedAsset) : null;
+  return directCandidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
 function resolveMediaRequest(request) {
@@ -232,8 +218,7 @@ async function setImageWallpaper(media) {
   // wallpaper is ESM; keep it lazy so Electron can still start without loading
   // platform-specific native helpers until an image is actually selected.
   const wallpaperModule = await loadWallpaperModule();
-  const setWallpaper =
-    wallpaperModule.setWallpaper ?? wallpaperModule.default?.setWallpaper;
+  const setWallpaper = wallpaperModule.setWallpaper ?? wallpaperModule.default?.setWallpaper;
   if (typeof setWallpaper !== "function") {
     throw new Error("wallpaper 模块没有提供 setWallpaper() API");
   }
@@ -247,20 +232,22 @@ async function setImageWallpaper(media) {
   }
 
   const readVerification = async () => {
-    const current = process.platform === "darwin"
-      ? await getWallpaper({ screen: "all" })
-      : await getWallpaper();
-    const currentPaths = (Array.isArray(current) ? current : [current])
-      .filter((currentPath) => typeof currentPath === "string" && currentPath.trim());
+    const current =
+      process.platform === "darwin" ? await getWallpaper({ screen: "all" }) : await getWallpaper();
+    const currentPaths = (Array.isArray(current) ? current : [current]).filter(
+      (currentPath) => typeof currentPath === "string" && currentPath.trim(),
+    );
 
     if (!currentPaths.length) return { status: "unverified" };
-    if (currentPaths.some((currentPath) => {
-      try {
-        return fs.statSync(currentPath).isDirectory();
-      } catch {
-        return false;
-      }
-    })) {
+    if (
+      currentPaths.some((currentPath) => {
+        try {
+          return fs.statSync(currentPath).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+    ) {
       return { status: "unverified" };
     }
 
@@ -281,7 +268,7 @@ async function setImageWallpaper(media) {
   try {
     let firstMatch = false;
     let sawMismatch = false;
-    for (const delay of [120, 350, 700]) {
+    for (const delay of VERIFICATION_DELAYS_MS) {
       await wait(delay);
       const check = await readVerification();
       if (check.status === "match") {
@@ -301,7 +288,7 @@ async function setImageWallpaper(media) {
     }
 
     // A second check catches wallpaper utilities that immediately reclaim the desktop.
-    await wait(1200);
+    await wait(VERIFICATION_STABILITY_DELAY_MS);
     const stableCheck = await readVerification();
     if (stableCheck.status === "match") {
       return { verified: true, verification: "verified", code: "OK" };
@@ -436,13 +423,10 @@ function registerIpc() {
       filters: [
         {
           name: "图片与视频",
-          extensions: [
-            ...[...IMAGE_EXTENSIONS].map((extension) => extension.slice(1)),
-            ...[...VIDEO_EXTENSIONS].map((extension) => extension.slice(1)),
-          ],
+          extensions: [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS],
         },
-        { name: "图片", extensions: [...IMAGE_EXTENSIONS].map((extension) => extension.slice(1)) },
-        { name: "视频", extensions: [...VIDEO_EXTENSIONS].map((extension) => extension.slice(1)) },
+        { name: "图片", extensions: [...IMAGE_EXTENSIONS] },
+        { name: "视频", extensions: [...VIDEO_EXTENSIONS] },
       ],
     };
 
@@ -470,12 +454,13 @@ function registerIpc() {
     const total = Number.isFinite(payload?.total)
       ? Math.max(0, Math.floor(payload.total))
       : requestedPaths.length;
-    const limitedPaths = requestedPaths.slice(0, 100);
+    const limitedPaths = requestedPaths.slice(0, MAX_DROPPED_PATHS);
     const seen = new Set();
     const files = [];
     let duplicateCount = 0;
-    let rejectedCount = Math.max(0, total - requestedPaths.length)
-      + Math.max(0, requestedPaths.length - limitedPaths.length);
+    let rejectedCount =
+      Math.max(0, total - requestedPaths.length) +
+      Math.max(0, requestedPaths.length - limitedPaths.length);
 
     for (const requestedPath of limitedPaths) {
       try {
@@ -510,9 +495,10 @@ function registerIpc() {
 
     try {
       const media = resolveMediaRequest(request);
-      const result = media.kind === "video"
-        ? await setVideoWallpaper(media, { force: request.force === true })
-        : await setImageWallpaper(media);
+      const result =
+        media.kind === "video"
+          ? await setVideoWallpaper(media, { force: request.force === true })
+          : await setImageWallpaper(media);
       const conflict = result?.verified === false;
 
       return {
@@ -574,10 +560,7 @@ async function createMainWindow() {
   }
 
   const nextWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 900,
-    minHeight: 620,
+    ...MAIN_WINDOW_BOUNDS,
     show: false,
     backgroundColor: "#78dce5",
     title: "Luma",

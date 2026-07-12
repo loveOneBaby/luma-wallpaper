@@ -1,6 +1,4 @@
-function getBridge() {
-  return typeof window === "undefined" ? null : window.lumaDesktop ?? null;
-}
+import { getBridge } from "./desktopBridge.js";
 
 export async function resolveDroppedDesktopMedia(fileList) {
   const bridge = getBridge();

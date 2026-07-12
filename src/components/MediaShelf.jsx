@@ -1,10 +1,6 @@
-import {
-  HeartIcon,
-  ImageIcon,
-  PlayIcon,
-  VideoCameraIcon,
-} from "@phosphor-icons/react";
+import { HeartIcon, ImageIcon, PlayIcon, VideoCameraIcon } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
+import { GLASS_MEDIA_SHELF } from "./glassPresets.js";
 
 const CATEGORIES = [
   { id: "all", label: "全部" },
@@ -73,22 +69,8 @@ export function MediaShelf({
 
   return (
     <GlassSurface
+      {...GLASS_MEDIA_SHELF}
       as="section"
-      width={null}
-      height={null}
-      borderRadius={null}
-      borderWidth={0.075}
-      brightness={65}
-      opacity={0.88}
-      blur={10}
-      displace={0.55}
-      backgroundOpacity={0.045}
-      saturation={1.4}
-      distortionScale={-145}
-      redOffset={-5}
-      greenOffset={10}
-      blueOffset={21}
-      mixBlendMode="screen"
       className="media-shelf liquid-glass"
       aria-label="壁纸素材库"
     >
@@ -134,7 +116,9 @@ export function MediaShelf({
             <VideoCameraIcon size={22} weight="regular" aria-hidden="true" />
           )}
           <span>{activeCategory === "favorite" ? "还没有收藏的壁纸" : "这个分类还是空的"}</span>
-          <button type="button" onClick={onUpload}>上传素材</button>
+          <button type="button" onClick={onUpload}>
+            上传素材
+          </button>
         </div>
       )}
     </GlassSurface>

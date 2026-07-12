@@ -5,6 +5,7 @@ release/
 .qa/
 design-qa.md
 AGENTS.md
+.zcode/
 
 .DS_Store
 *.log
