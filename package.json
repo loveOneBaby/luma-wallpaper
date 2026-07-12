@@ -96,9 +96,8 @@
       "category": "public.app-category.lifestyle",
       "publish": [
         {
-          "provider": "github",
-          "owner": "loveOneBaby",
-          "repo": "luma-releases",
+          "provider": "generic",
+          "url": "https://r2-public-url.invalid",
           "channel": "latest-${arch}"
         }
       ],
@@ -112,9 +111,8 @@
       "artifactName": "Luma-${version}-${arch}-Setup.${ext}",
       "publish": [
         {
-          "provider": "github",
-          "owner": "loveOneBaby",
-          "repo": "luma-releases",
+          "provider": "generic",
+          "url": "https://r2-public-url.invalid",
           "channel": "latest"
         }
       ],

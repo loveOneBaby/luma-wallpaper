@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/loveOneBaby/luma-wallpaper/actions/workflows/release.yml"><img src="https://github.com/loveOneBaby/luma-wallpaper/actions/workflows/release.yml/badge.svg" alt="Build and Release" /></a>
-  <a href="https://github.com/loveOneBaby/luma-releases/releases"><img src="https://img.shields.io/github/v/release/loveOneBaby/luma-releases?display_name=tag" alt="Latest release" /></a>
+  <a href="https://github.com/loveOneBaby/luma-wallpaper/releases"><img src="https://img.shields.io/github/package-json/v/loveOneBaby/luma-wallpaper" alt="Version" /></a>
 </p>
 
 ## 功能
@@ -24,7 +24,7 @@
 
 ## 下载
 
-稳定版本从产物仓库 [luma-releases](https://github.com/loveOneBaby/luma-releases/releases) 下载（`v0.1.5` 及更早版本仍在[源仓库 release 页](https://github.com/loveOneBaby/luma-wallpaper/releases)）：
+稳定版本从 Cloudflare R2 公开存储下载；`v0.1.5` 及更早版本仍在[源仓库 release 页](https://github.com/loveOneBaby/luma-wallpaper/releases)：
 
 - macOS Apple Silicon：DMG 或 ZIP
 - macOS Intel：DMG 或 ZIP
@@ -67,20 +67,24 @@ npm run desktop:build:win
 
 ## 桌面端自动发布
 
-推送与 `package.json` 版本一致的 `v*` 标签会构建全部平台，并把产物与更新清单发布到独立的产物仓库 [loveOneBaby/luma-releases](https://github.com/loveOneBaby/luma-releases)。桌面端自动更新也会查这个产物仓库；源仓库的 release 页只保留历史版本。
+推送与 `package.json` 版本一致的 `v*` 标签会构建全部平台，并把产物与更新清单上传到 Cloudflare R2 公开存储（扁平布局：根目录放 `latest.yml`、`latest-arm64-mac.yml`、`latest-x64-mac.yml` 和各版本二进制）。桌面端自动更新通过 electron-updater 的 `generic` provider 查询 `package.json` 里配置的 R2 公开 URL；源仓库的 release 页只保留历史版本。
 
 ```bash
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 不要在仅修改版本号前提前创建标签；先等待 `main` 的 Web CI 通过，再推送标签。手动运行 `Build and Release` 会生成可下载的桌面端 Actions Artifacts，但不会创建 Release。桌面发布复用已经通过测试的 renderer 产物，不会在三个系统上重复构建前端。
 
-流水线会同时发布 Windows `latest.yml`、macOS 分架构更新清单和差分下载 blockmap，并在上传前校验清单中的每个 URL、文件大小和 SHA-512。产物发布到 `luma-releases` 后还会通过 GitHub API、HTTP 下载地址和 GitHub SHA-256 digest 再验证一次。
+流水线会同时发布 Windows `latest.yml`、macOS 分架构更新清单和差分下载 blockmap，并在上传前校验清单中的每个 URL、文件大小和 SHA-512。上传到 R2 后还会用 HTTP 逐份拉取远端清单与本地逐字比对，并对每个引用产物做 HEAD 请求校验 Content-Length 与清单 size 一致。
 
-发布到 `luma-releases` 需要在源仓库 Actions Secrets 配置：
+发布到 R2 需要在源仓库 Actions Secrets 配置 4 个 S3 兼容凭证（任缺即 fail-fast）：
 
-- `RELEASES_TOKEN`：对 `loveOneBaby/luma-releases` 有 `Contents: Read and Write` 权限的 fine-grained PAT（`GITHUB_TOKEN` 只能写当前仓库，无法跨仓库发布）。缺失时 release 作业会立即失败。
+- `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`
+
+并把 R2 bucket 的公开访问 URL 硬编码进 `package.json` 的 `build.*.publish[].url`（打进 `app-update.yml`）。URL 仍是占位时 release 作业会拒绝发布。
+
+R2 bucket 需在 Cloudflare 后台开启公开访问（Settings → Public access），对象默认公开可读（无需 `--acl`）。`latest*.yml` 用 `no-cache`，版本化二进制用长期不可变缓存。
 
 macOS 签名与公证凭据是可选的。完整配置以下 6 项会签名并公证（mac 自动更新随之生效）；全部留空则发布未签名版（mac 自动更新被运行时门禁关闭，仅带 `::warning`）；只配置其中几项会直接失败：
 
