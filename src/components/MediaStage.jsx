@@ -2,7 +2,6 @@ export function MediaStage({
   media,
   videoRef,
   muted,
-  isPlaying,
   onLoadedMetadata,
   onTimeUpdate,
   onPlay,
@@ -11,16 +10,19 @@ export function MediaStage({
   onImageError,
 }) {
   return (
-    <div className="media-stage" aria-label={`${media.name} 预览`}>
+    <div className="media-stage" role="group" aria-label={`${media.name} 预览`}>
       {media.kind === "video" ? (
         <video
           key={media.src}
           ref={videoRef}
           className="wallpaper-media"
           src={media.src}
+          poster={media.poster}
           muted={muted}
           loop
           playsInline
+          preload="metadata"
+          aria-hidden="true"
           onLoadedMetadata={onLoadedMetadata}
           onTimeUpdate={onTimeUpdate}
           onPlay={onPlay}
@@ -30,9 +32,10 @@ export function MediaStage({
       ) : (
         <img
           key={media.src}
-          className={`wallpaper-media wallpaper-image ${isPlaying ? "is-playing" : ""}`}
+          className="wallpaper-media wallpaper-image"
           src={media.src}
-          alt="用户上传的壁纸预览"
+          alt=""
+          decoding="async"
           onError={onImageError}
         />
       )}

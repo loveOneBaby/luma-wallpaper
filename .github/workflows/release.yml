@@ -3,8 +3,6 @@ name: Build and Release
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
     tags:
       - "v*"
 
@@ -12,11 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   NODE_VERSION: "24"
+  NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
 
 jobs:
   validate:
@@ -24,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Match tag to package version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -38,21 +37,28 @@ jobs:
           fi
 
   web:
-    name: Web
+    name: Test and build Web
     needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          registry-url: https://registry.npmjs.org/
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm run audit:ci
+
+      - name: Run tests
+        run: npm test
 
       - name: Lint
         run: npm run lint
@@ -69,16 +75,24 @@ jobs:
           zip -r "../release/Luma-${VERSION}-web.zip" .
 
       - name: Upload web artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: luma-web
           path: release/*-web.zip
           if-no-files-found: error
           retention-days: 14
 
+      - name: Reuse renderer in desktop jobs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: renderer-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 2
+
   macos:
     name: macOS (${{ matrix.label }})
-    needs: validate
+    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -90,60 +104,89 @@ jobs:
             runner: macos-15-intel
             arch: x64
     runs-on: ${{ matrix.runner }}
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
-      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY }}
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          registry-url: https://registry.npmjs.org/
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build renderer
-        run: npm run build
+      - name: Download tested renderer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: renderer-dist
+          path: dist
 
-      - name: Prepare Apple notarization key
-        if: env.APPLE_API_KEY_BASE64 != ''
+      - name: Package, sign, and notarize macOS app
         shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
-          printf '%s' "$APPLE_API_KEY_BASE64" | base64 -D > "$KEY_PATH"
-          chmod 600 "$KEY_PATH"
-          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
-
-      - name: Package macOS app
-        shell: bash
-        run: |
-          if [[ -z "$CSC_LINK" ]]; then
-            unset CSC_LINK CSC_KEY_PASSWORD
+          set -euo pipefail
+          values=("$CSC_LINK" "$CSC_KEY_PASSWORD" "$APPLE_API_KEY_BASE64" "$APPLE_API_KEY_ID" "$APPLE_API_ISSUER" "$APPLE_TEAM_ID")
+          configured=0
+          for value in "${values[@]}"; do
+            [[ -z "$value" ]] || configured=$((configured + 1))
+          done
+          if (( configured > 0 && configured < ${#values[@]} )); then
+            echo "macOS signing is only partially configured. Supply every documented secret or none for a manual unsigned build."
+            exit 1
           fi
+
+          KEY_PATH=""
+          cleanup() { [[ -z "$KEY_PATH" ]] || rm -f "$KEY_PATH"; }
+          trap cleanup EXIT
+
           BUILD_ARGS=(--mac --${{ matrix.arch }} --publish never)
-          if [[ -n "$APPLE_API_KEY" && -n "$APPLE_API_KEY_ID" && -n "$APPLE_API_ISSUER" ]]; then
+          if (( configured == ${#values[@]} )); then
+            KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+            printf '%s' "$APPLE_API_KEY_BASE64" | base64 -D > "$KEY_PATH"
+            chmod 600 "$KEY_PATH"
+            export APPLE_API_KEY="$KEY_PATH"
             BUILD_ARGS+=(--config.mac.notarize=true)
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::warning title=Unsigned macOS artifact::This build is not signed and cannot auto-update on macOS. Configure the Apple Developer ID secrets (MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_TEAM_ID) to enable signed, notarized releases."
           fi
-          npx electron-builder "${BUILD_ARGS[@]}"
+
+          npx --no-install electron-builder "${BUILD_ARGS[@]}"
+
+          if (( configured == ${#values[@]} )); then
+            APP_PATH=$(find release -maxdepth 2 -type d -name 'Luma.app' -print -quit)
+            [[ -n "$APP_PATH" ]] || { echo "Packaged Luma.app was not found"; exit 1; }
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+            TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            if [[ -z "$TEAM_ID" || "$TEAM_ID" == "not set" || "$TEAM_ID" == "not-set" ]]; then
+              echo "Packaged app does not contain a Developer ID TeamIdentifier"
+              exit 1
+            fi
+            xcrun stapler validate "$APP_PATH"
+          fi
 
       - name: Verify macOS update metadata
         shell: bash
         run: |
-          test -f "release/latest-${{ matrix.arch }}-mac.yml"
           compgen -G "release/*-mac.zip" >/dev/null
           compgen -G "release/*.blockmap" >/dev/null
+          node scripts/validate-update-artifacts.mjs \
+            --dir release "release/latest-${{ matrix.arch }}-mac.yml"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: luma-macos-${{ matrix.label }}
           path: |
@@ -156,44 +199,67 @@ jobs:
 
   windows:
     name: Windows x64
-    needs: validate
+    needs: web
     runs-on: windows-2025
-    env:
-      CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          registry-url: https://registry.npmjs.org/
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build renderer
-        run: npm run build
+      - name: Download tested renderer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: renderer-dist
+          path: dist
 
-      - name: Package Windows installer
+      - name: Package and validate Windows installer
         shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK)) {
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:CSC_LINK)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD)
+          if ($hasCertificate -ne $hasPassword) {
+            throw "Windows signing is partially configured. Set both WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD."
+          }
+          if (-not $hasCertificate) {
+            Write-Output "::warning title=Unsigned Windows artifact::WIN_CSC_LINK is not configured; publishing an unknown-publisher installer."
             Remove-Item Env:CSC_LINK -ErrorAction SilentlyContinue
             Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
           }
-          npx electron-builder --win --x64 --publish never
+
+          npx --no-install electron-builder --win --x64 --publish never
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
+
+          $installers = Get-ChildItem "release/*.exe"
+          if (-not $installers) { throw "Windows installer was not generated" }
+          if ($hasCertificate) {
+            $installers | ForEach-Object {
+              $signature = Get-AuthenticodeSignature $_.FullName
+              if ($signature.Status -ne "Valid") {
+                throw "$($_.Name) has invalid Authenticode status: $($signature.Status)"
+              }
+            }
+          }
 
       - name: Verify Windows update metadata
         shell: pwsh
         run: |
-          if (-not (Test-Path "release/latest.yml")) { throw "latest.yml was not generated" }
           if (-not (Get-ChildItem "release/*.exe.blockmap")) { throw "Windows blockmap was not generated" }
+          node scripts/validate-update-artifacts.mjs --dir release release/latest.yml
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: luma-windows-x64
           path: |
@@ -204,7 +270,7 @@ jobs:
           retention-days: 14
 
   release:
-    name: Publish GitHub Release
+    name: Publish and verify GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - web
@@ -214,11 +280,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: luma-*
           path: release-assets
           merge-multiple: true
+
+      - name: Validate merged update artifacts
+        run: node scripts/validate-update-artifacts.mjs --dir release-assets
 
       - name: Create or update release
         shell: bash
@@ -234,3 +312,13 @@ jobs:
               --generate-notes \
               --title "Luma $GITHUB_REF_NAME"
           fi
+
+      - name: Verify published release through GitHub API and HTTP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/verify-github-release.mjs \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --expected-sha "$GITHUB_SHA" \
+            --local-dir release-assets

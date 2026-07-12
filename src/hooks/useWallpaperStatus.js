@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyDesktopWallpaper } from "../services/desktopWallpaper.js";
+import { applyDesktopWallpaper, subscribeWallpaperRuntime } from "../services/desktopWallpaper.js";
 import {
   getDesktopUpdateState,
   installDesktopUpdate,
@@ -23,6 +23,7 @@ const FEEDBACK_DURATION_UPDATE_ERROR_MS = 7200;
 export function useWallpaperStatus() {
   const [feedback, setFeedback] = useState(null);
   const [applyState, setApplyState] = useState("idle");
+  const [hasWallpaperRecovery, setHasWallpaperRecovery] = useState(false);
   const [isConflictOpen, setConflictOpen] = useState(
     () =>
       import.meta.env.DEV &&
@@ -73,9 +74,17 @@ export function useWallpaperStatus() {
   );
 
   const showUploadResult = useCallback(
-    ({ added, duplicates = 0, rejected = 0 }) => {
+    ({ added, duplicates = 0, rejected = 0, reason = null }) => {
       if (added > 0) {
         const skipped = duplicates + rejected;
+        if (reason === "library-full") {
+          showFeedback(
+            "warning",
+            `已添加 ${added} 个素材，媒体库已达 1000 个上限${skipped > 0 ? `，跳过 ${skipped} 个` : ""}`,
+            { source: "upload" },
+          );
+          return;
+        }
         showFeedback(
           skipped > 0 ? "warning" : "success",
           `已添加 ${added} 个素材${skipped > 0 ? `，跳过 ${skipped} 个` : ""}`,
@@ -83,8 +92,30 @@ export function useWallpaperStatus() {
         );
         return;
       }
+      if (reason === "library-full") {
+        showFeedback("warning", "媒体库最多保存 1000 个素材，请先移除不需要的内容", {
+          source: "upload",
+        });
+        return;
+      }
       if (duplicates > 0) {
         showFeedback("info", "这个素材已经在媒体库中", { source: "upload" });
+        return;
+      }
+      if (reason === "too-many") {
+        showFeedback("warning", "单次最多上传 100 个素材", { source: "upload" });
+        return;
+      }
+      if (reason === "too-large") {
+        showFeedback("error", "文件过大：图片上限 100 MB，视频上限 1 GB", {
+          source: "upload",
+        });
+        return;
+      }
+      if (reason === "decode") {
+        showFeedback("error", "浏览器无法解码这个素材，请换用常见格式或编码", {
+          source: "upload",
+        });
         return;
       }
       showFeedback("error", "没有可用素材，请拖入支持的图片或视频", { source: "upload" });
@@ -109,6 +140,7 @@ export function useWallpaperStatus() {
       });
       const result = await applyDesktopWallpaper(media, { force });
       if (result.status === "conflict") setConflictOpen(true);
+      if (result.status === "success") setHasWallpaperRecovery(true);
       showApplyStatus(result.status, result.message);
     },
     [applyState, showApplyStatus],
@@ -139,6 +171,7 @@ export function useWallpaperStatus() {
 
   useEffect(() => {
     let active = true;
+    let lastNoticeKey = null;
     const handleUpdateState = (state) => {
       if (!active || !state?.state) return;
       if (state.state === "available" || state.state === "downloading") {
@@ -161,8 +194,33 @@ export function useWallpaperStatus() {
           persistent: true,
           updateState: state,
         });
-      } else if (state.state === "error" && state.message) {
-        showFeedback("error", `更新失败：${state.message}`, {
+      } else if (state.state === "unsupported") {
+        const message =
+          state.message ??
+          (state.reason === "mac-signature-required"
+            ? "当前 macOS 版本未签名，请从发布页手动下载安装更新"
+            : "当前版本暂不支持自动更新，请手动下载安装新版本");
+        const noticeKey = `unsupported:${state.reason ?? message}`;
+        if (noticeKey === lastNoticeKey) return;
+        lastNoticeKey = noticeKey;
+        showFeedback("warning", message, {
+          source: "update",
+          duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+        });
+      } else if (state.state === "idle" && state.lastError) {
+        const noticeKey = `idle-error:${state.lastError}`;
+        if (noticeKey === lastNoticeKey) return;
+        lastNoticeKey = noticeKey;
+        showFeedback("error", `更新检查失败：${state.lastError}`, {
+          source: "update",
+          duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+        });
+      } else if (state.state === "error" && (state.message || state.lastError)) {
+        const message = state.message ?? state.lastError;
+        const noticeKey = `error:${message}`;
+        if (noticeKey === lastNoticeKey) return;
+        lastNoticeKey = noticeKey;
+        showFeedback("error", `更新失败：${message}`, {
           source: "update",
           duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
         });
@@ -179,6 +237,17 @@ export function useWallpaperStatus() {
     };
   }, [showFeedback]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeWallpaperRuntime((payload) => {
+      const detail = typeof payload === "string" ? payload : payload?.message;
+      showFeedback("error", `动态壁纸已停止${detail ? `：${detail}` : "，请重新应用"}`, {
+        source: "wallpaper-runtime",
+        duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+      });
+    });
+    return () => unsubscribe?.();
+  }, [showFeedback]);
+
   // Clear any pending toast timer on unmount.
   useEffect(
     () => () => {
@@ -190,6 +259,7 @@ export function useWallpaperStatus() {
   return {
     feedback,
     applyState,
+    hasWallpaperRecovery,
     isConflictOpen,
     setConflictOpen,
     showFeedback,

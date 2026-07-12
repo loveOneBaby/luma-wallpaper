@@ -1,9 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import demoImage from "../assets/ocean-morning.png";
 import demoVideo from "../assets/ocean-morning.mp4";
-import { pickDesktopMedia } from "../services/desktopWallpaper.js";
+import { getBridge } from "../services/desktopBridge.js";
+import { loadLibraryState, saveLibraryState } from "../services/libraryStorage.js";
+import { pickDesktopMedia, releaseDesktopMedia } from "../services/desktopWallpaper.js";
 import { resolveDroppedDesktopMedia } from "../services/desktopUpdates.js";
 import { kindFromExtension } from "../../shared/mediaExtensions.js";
+
+const MAX_UPLOAD_BATCH = 100;
+const MAX_LIBRARY_ITEMS = 1000;
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
+const VALIDATION_WORKERS = 8;
+const MEDIA_VALIDATION_TIMEOUT_MS = 8_000;
+const VALID_CATEGORIES = new Set(["all", "image", "video", "favorite"]);
+const CATEGORY_ALIASES = {
+  images: "image",
+  videos: "video",
+  favorites: "favorite",
+};
 
 const DEMO_ITEMS = [
   {
@@ -16,6 +31,7 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "ocean-morning-video",
     sourceKey: "demo:ocean-morning-video",
+    poster: demoImage,
   },
   {
     id: "demo-image",
@@ -35,121 +51,487 @@ function createId() {
 }
 
 function browserSourceKey(file, kind) {
-  return `browser:${kind}:${file.name.toLowerCase()}:${file.size}:${file.lastModified ?? 0}`;
+  const name = typeof file?.name === "string" ? file.name : "unnamed";
+  return `browser:${kind}:${name.toLowerCase()}:${file?.size ?? 0}:${file?.lastModified ?? 0}`;
 }
 
-/**
- * Owns the media library: items, selection, category, library open state, and
- * click/drag upload ingestion (browser object URLs + desktop native paths).
- * Playback reset is delegated to usePlayback (it reacts to media.id change),
- * so selection here is a plain setSelectedId.
- */
+function validateImage(file) {
+  return new Promise((resolve) => {
+    const src = URL.createObjectURL(file);
+    const image = new Image();
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+      URL.revokeObjectURL(src);
+      resolve(result);
+    };
+    const timer = window.setTimeout(() => finish(false), MEDIA_VALIDATION_TIMEOUT_MS);
+    image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0);
+    image.onerror = () => finish(false);
+    image.src = src;
+  });
+}
+
+function validateVideo(file) {
+  return new Promise((resolve) => {
+    const src = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      video.onloadeddata = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(src);
+      resolve(result);
+    };
+    const timer = window.setTimeout(() => finish(false), MEDIA_VALIDATION_TIMEOUT_MS);
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.onloadeddata = () => finish(video.videoWidth > 0 && video.videoHeight > 0);
+    video.onerror = () => finish(false);
+    video.src = src;
+    video.load();
+  });
+}
+
+async function validateBrowserFile(file) {
+  if (!file || !Number.isFinite(file.size) || file.size <= 0) {
+    return { kind: null, reason: "invalid" };
+  }
+
+  const kind = kindFromExtension(file.name);
+  if (!kind) return { kind: null, reason: "unsupported" };
+  if (kind === "image" && file.size > MAX_IMAGE_BYTES) {
+    return { kind: null, reason: "too-large" };
+  }
+  if (kind === "video" && file.size > MAX_VIDEO_BYTES) {
+    return { kind: null, reason: "too-large" };
+  }
+
+  const decodable = kind === "image" ? await validateImage(file) : await validateVideo(file);
+  return decodable ? { kind, reason: null } : { kind: null, reason: "decode" };
+}
+
+async function validateBrowserFiles(files) {
+  const results = new Array(files.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < files.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await validateBrowserFile(files[index]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(VALIDATION_WORKERS, files.length) }, () => worker()),
+  );
+  return results;
+}
+
+function serializeItem(item, isDesktop) {
+  if (item.isDemo) {
+    return {
+      id: item.id,
+      demoKey: item.demoKey,
+      favorite: item.favorite,
+      isDemo: true,
+    };
+  }
+
+  if (isDesktop) {
+    if (!item.filePath) return null;
+    return {
+      id: item.id,
+      name: item.name,
+      kind: item.kind,
+      favorite: item.favorite,
+      isDemo: false,
+      sourceKey: item.sourceKey,
+      filePath: item.filePath,
+      src: item.src,
+    };
+  }
+
+  if (!(item.file instanceof Blob)) return null;
+  return {
+    id: item.id,
+    name: item.name,
+    kind: item.kind,
+    favorite: item.favorite,
+    isDemo: false,
+    sourceKey: item.sourceKey,
+    file: item.file,
+  };
+}
+
+function restoreItems(state, objectUrls) {
+  const storedItems = Array.isArray(state?.items) ? state.items : [];
+  const demos = DEMO_ITEMS.map((demo) => {
+    const stored = storedItems.find(
+      (item) => item?.id === demo.id || item?.demoKey === demo.demoKey,
+    );
+    return { ...demo, favorite: stored?.favorite ?? demo.favorite };
+  });
+  const seenIds = new Set(demos.map((item) => item.id));
+  const restored = [];
+
+  for (const item of storedItems) {
+    if (!item || item.isDemo || !item.id || seenIds.has(item.id)) continue;
+    if (demos.length + restored.length >= MAX_LIBRARY_ITEMS) break;
+    const kind = item.kind === "image" || item.kind === "video" ? item.kind : null;
+    if (!kind || typeof item.name !== "string") continue;
+
+    if (item.file instanceof Blob) {
+      const src = URL.createObjectURL(item.file);
+      objectUrls.add(src);
+      restored.push({
+        id: item.id,
+        src,
+        name: item.name,
+        kind,
+        favorite: Boolean(item.favorite),
+        objectUrl: true,
+        isDemo: false,
+        sourceKey: item.sourceKey ?? browserSourceKey(item.file, kind),
+        file: item.file,
+      });
+      seenIds.add(item.id);
+      continue;
+    }
+
+    const filePath = item.filePath ?? item.path;
+    const src = item.src ?? item.url;
+    if (typeof filePath !== "string" || typeof src !== "string") continue;
+    restored.push({
+      id: item.id,
+      src,
+      name: item.name,
+      kind,
+      favorite: Boolean(item.favorite),
+      objectUrl: false,
+      isDemo: false,
+      sourceKey: item.sourceKey ?? `desktop:${item.identity ?? filePath}`,
+      filePath,
+    });
+    seenIds.add(item.id);
+  }
+
+  return [...demos, ...restored];
+}
+
+/** Owns the uploaded media library, persistence, selection and ingestion. */
 export function useMediaLibrary({ showFeedback, showUploadResult }) {
-  const [items, setItems] = useState(DEMO_ITEMS);
+  const [items, setItems] = useState(() => DEMO_ITEMS.map((item) => ({ ...item })));
   const [selectedId, setSelectedId] = useState(DEMO_ITEMS[0].id);
   const [activeCategory, setActiveCategory] = useState("all");
   const [isLibraryOpen, setLibraryOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const fileInputRef = useRef(null);
   const dragDepthRef = useRef(0);
   const objectUrlsRef = useRef(new Set());
+  const itemsRef = useRef(items);
+  const sourceKeysRef = useRef(new Set(items.map((item) => item.sourceKey).filter(Boolean)));
+  const storageWarningRef = useRef(false);
+  const importQueueRef = useRef(Promise.resolve());
+
+  const commitItems = useCallback((nextItems) => {
+    itemsRef.current = nextItems;
+    sourceKeysRef.current = new Set(nextItems.map((item) => item.sourceKey).filter(Boolean));
+    setItems(nextItems);
+  }, []);
+
+  const ensureHydrated = useCallback(() => {
+    if (isHydrated) return true;
+    showFeedback("info", "正在恢复媒体库，请稍候", {
+      source: "library",
+      duration: 2200,
+    });
+    return false;
+  }, [isHydrated, showFeedback]);
+
+  const enqueueImport = useCallback((operation) => {
+    const queued = importQueueRef.current.catch(() => undefined).then(operation);
+    importQueueRef.current = queued.catch(() => undefined);
+    return queued;
+  }, []);
+
+  useEffect(() => {
+    itemsRef.current = items;
+    sourceKeysRef.current = new Set(items.map((item) => item.sourceKey).filter(Boolean));
+  }, [items]);
 
   const media = items.find((item) => item.id === selectedId) ?? items[0];
 
+  useEffect(() => {
+    let active = true;
+    loadLibraryState()
+      .then((state) => {
+        if (!active || !state) return;
+        const restoredObjectUrls = new Set();
+        let restored;
+        try {
+          restored = restoreItems(state, restoredObjectUrls);
+        } catch (error) {
+          restoredObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+          throw error;
+        }
+        if (!active) {
+          restoredObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+          return;
+        }
+        restoredObjectUrls.forEach((url) => objectUrlsRef.current.add(url));
+        commitItems(restored);
+        const retainedSourceKeys = new Set(
+          restored.map((item) => item.sourceKey).filter(Boolean),
+        );
+        const truncatedDesktopPaths = [
+          ...new Set(
+            (Array.isArray(state.items) ? state.items : [])
+              .filter((item) => {
+                const filePath = item?.filePath ?? item?.path;
+                if (typeof filePath !== "string") return false;
+                const sourceKey =
+                  item.sourceKey ?? `desktop:${item.identity ?? filePath}`;
+                return !retainedSourceKeys.has(sourceKey);
+              })
+              .map((item) => item.filePath ?? item.path),
+          ),
+        ];
+        if (truncatedDesktopPaths.length > 0) {
+          void releaseDesktopMedia(truncatedDesktopPaths).catch(() => undefined);
+        }
+        setSelectedId(
+          restored.some((item) => item.id === state.selectedId) ? state.selectedId : restored[0].id,
+        );
+        const restoredCategory = CATEGORY_ALIASES[state.activeCategory] ?? state.activeCategory;
+        if (VALID_CATEGORIES.has(restoredCategory)) {
+          setActiveCategory(restoredCategory);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          showFeedback("warning", "未能恢复上次的媒体库，本次仍可正常使用", {
+            source: "library",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setIsHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [commitItems, showFeedback]);
+
+  useEffect(() => {
+    if (!isHydrated) return undefined;
+    const timer = window.setTimeout(() => {
+      const isDesktop = Boolean(getBridge()?.isDesktop);
+      const state = {
+        version: 1,
+        items: items.map((item) => serializeItem(item, isDesktop)).filter(Boolean),
+        selectedId,
+        activeCategory,
+      };
+      saveLibraryState(state)
+        .then((result) => {
+          if (result?.ok !== false) return;
+          throw new Error("library-storage-unavailable");
+        })
+        .catch(() => {
+          if (storageWarningRef.current) return;
+          storageWarningRef.current = true;
+          showFeedback("warning", "媒体库暂时无法保存，请检查可用存储空间", {
+            source: "library",
+          });
+        });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [activeCategory, isHydrated, items, selectedId, showFeedback]);
+
   const addBrowserFiles = useCallback(
     (fileList) => {
-      const existingKeys = new Set(items.map((item) => item.sourceKey).filter(Boolean));
-      const batchKeys = new Set();
-      const nextItems = [];
-      let duplicates = 0;
-      let rejected = 0;
+      const sourceFiles = Array.from(fileList ?? []);
+      if (!sourceFiles.length) return Promise.resolve();
+      if (!ensureHydrated()) return Promise.resolve();
 
-      for (const file of Array.from(fileList ?? [])) {
-        if (!file || !Number.isFinite(file.size) || file.size <= 0) {
-          rejected += 1;
-          continue;
+      return enqueueImport(async () => {
+        if (itemsRef.current.length >= MAX_LIBRARY_ITEMS) {
+          showUploadResult({
+            added: 0,
+            rejected: sourceFiles.length,
+            reason: "library-full",
+          });
+          return;
         }
-        const kind = kindFromExtension(file.name);
-        if (!kind) {
-          rejected += 1;
-          continue;
+
+        const files = sourceFiles.slice(0, MAX_UPLOAD_BATCH);
+        let rejected = Math.max(0, sourceFiles.length - MAX_UPLOAD_BATCH);
+        let firstRejectionReason = rejected > 0 ? "too-many" : null;
+
+        if (files.length > 4) {
+          showFeedback("info", `正在检查 ${files.length} 个素材…`, {
+            source: "upload",
+            persistent: true,
+          });
         }
-        const sourceKey = browserSourceKey(file, kind);
-        if (existingKeys.has(sourceKey) || batchKeys.has(sourceKey)) {
-          duplicates += 1;
-          continue;
+        let validation;
+        try {
+          validation = await validateBrowserFiles(files);
+        } catch {
+          showFeedback("error", "素材检查失败，请重新选择文件", { source: "upload" });
+          return;
         }
-        batchKeys.add(sourceKey);
-        const src = URL.createObjectURL(file);
-        objectUrlsRef.current.add(src);
-        nextItems.push({
-          id: createId(),
-          src,
-          name: file.name,
-          kind,
-          favorite: false,
-          objectUrl: true,
-          isDemo: false,
-          sourceKey,
-          file,
+        const nextItems = [];
+        let duplicates = 0;
+        let libraryFull = false;
+
+        files.forEach((file, index) => {
+          const result = validation[index];
+          if (!result?.kind) {
+            rejected += 1;
+            firstRejectionReason ??= result?.reason ?? "invalid";
+            return;
+          }
+          const sourceKey = browserSourceKey(file, result.kind);
+          if (sourceKeysRef.current.has(sourceKey)) {
+            duplicates += 1;
+            return;
+          }
+          if (itemsRef.current.length + nextItems.length >= MAX_LIBRARY_ITEMS) {
+            rejected += 1;
+            libraryFull = true;
+            return;
+          }
+
+          sourceKeysRef.current.add(sourceKey);
+          const src = URL.createObjectURL(file);
+          objectUrlsRef.current.add(src);
+          nextItems.push({
+            id: createId(),
+            src,
+            name: file.name,
+            kind: result.kind,
+            favorite: false,
+            objectUrl: true,
+            isDemo: false,
+            sourceKey,
+            file,
+          });
         });
-      }
 
-      showUploadResult({ added: nextItems.length, duplicates, rejected });
-      if (!nextItems.length) return;
-      setItems((previous) => [...previous, ...nextItems]);
-      setSelectedId(nextItems[0].id);
-      setLibraryOpen(true);
+        showUploadResult({
+          added: nextItems.length,
+          duplicates,
+          rejected,
+          reason: libraryFull ? "library-full" : firstRejectionReason,
+        });
+        if (!nextItems.length) return;
+        commitItems([...itemsRef.current, ...nextItems]);
+        setSelectedId(nextItems[0].id);
+        setLibraryOpen(true);
+      });
     },
-    [items, showUploadResult],
+    [commitItems, enqueueImport, ensureHydrated, showFeedback, showUploadResult],
   );
 
   const addDesktopFiles = useCallback(
     (files, counts = {}) => {
-      const existingKeys = new Set(items.map((item) => item.sourceKey).filter(Boolean));
-      const batchKeys = new Set();
-      let duplicates = counts.duplicateCount ?? 0;
-      const nextItems = [];
+      const sourceFiles = Array.from(files ?? []);
+      if (!ensureHydrated()) return Promise.resolve();
 
-      for (const file of files ?? []) {
-        const sourceKey = `desktop:${file.identity ?? file.path}`;
-        if (existingKeys.has(sourceKey) || batchKeys.has(sourceKey)) {
-          duplicates += 1;
-          continue;
+      return enqueueImport(async () => {
+        const candidateFiles = sourceFiles.slice(0, MAX_UPLOAD_BATCH);
+        let duplicates = counts.duplicateCount ?? 0;
+        let rejected =
+          (counts.rejectedCount ?? 0) + Math.max(0, sourceFiles.length - MAX_UPLOAD_BATCH);
+        let libraryFull = false;
+        const nextItems = [];
+
+        for (const file of candidateFiles) {
+          const sourceKey = `desktop:${file.identity ?? file.path}`;
+          if (sourceKeysRef.current.has(sourceKey)) {
+            duplicates += 1;
+            continue;
+          }
+          if (itemsRef.current.length + nextItems.length >= MAX_LIBRARY_ITEMS) {
+            rejected += 1;
+            libraryFull = true;
+            continue;
+          }
+          sourceKeysRef.current.add(sourceKey);
+          nextItems.push({
+            id: createId(),
+            src: file.url,
+            name: file.name,
+            kind: file.kind,
+            favorite: false,
+            objectUrl: false,
+            isDemo: false,
+            sourceKey,
+            filePath: file.path,
+          });
         }
-        batchKeys.add(sourceKey);
-        nextItems.push({
-          id: createId(),
-          src: file.url,
-          name: file.name,
-          kind: file.kind,
-          favorite: false,
-          objectUrl: false,
-          isDemo: false,
-          sourceKey,
-          filePath: file.path,
-        });
-      }
 
-      showUploadResult({
-        added: nextItems.length,
-        duplicates,
-        rejected: counts.rejectedCount ?? 0,
+        if (nextItems.length > 0) {
+          commitItems([...itemsRef.current, ...nextItems]);
+          setSelectedId(nextItems[0].id);
+          setLibraryOpen(true);
+        }
+
+        const releasePaths = [
+          ...new Set(
+            sourceFiles
+              .filter((file) => {
+                const sourceKey = `desktop:${file.identity ?? file.path}`;
+                return !sourceKeysRef.current.has(sourceKey);
+              })
+              .map((file) => file.path)
+              .filter(Boolean),
+          ),
+        ];
+        if (releasePaths.length > 0) {
+          await releaseDesktopMedia(releasePaths).catch(() => undefined);
+        }
+
+        showUploadResult({
+          added: nextItems.length,
+          duplicates,
+          rejected,
+          reason: libraryFull
+            ? "library-full"
+            : sourceFiles.length > MAX_UPLOAD_BATCH
+              ? "too-many"
+              : null,
+        });
       });
-      if (!nextItems.length) return;
-      setItems((previous) => [...previous, ...nextItems]);
-      setSelectedId(nextItems[0].id);
-      setLibraryOpen(true);
     },
-    [items, showUploadResult],
+    [commitItems, enqueueImport, ensureHydrated, showUploadResult],
   );
 
   const openFilePicker = useCallback(async () => {
+    if (!ensureHydrated()) return;
     try {
-      const desktopFiles = await pickDesktopMedia();
-      if (desktopFiles !== null) {
-        if (desktopFiles.length > 0) addDesktopFiles(desktopFiles);
+      const desktopSelection = await pickDesktopMedia();
+      if (desktopSelection !== null) {
+        if (desktopSelection.canceled) return;
+        await addDesktopFiles(desktopSelection.files, {
+          duplicateCount: desktopSelection.duplicateCount,
+          rejectedCount: desktopSelection.rejectedCount,
+        });
         return;
       }
     } catch (error) {
@@ -159,13 +541,60 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
       return;
     }
     fileInputRef.current?.click();
-  }, [addDesktopFiles, showFeedback]);
+  }, [addDesktopFiles, ensureHydrated, showFeedback]);
 
-  const toggleFavorite = useCallback((id) => {
-    setItems((previous) =>
-      previous.map((item) => (item.id === id ? { ...item, favorite: !item.favorite } : item)),
-    );
-  }, []);
+  const selectMedia = useCallback(
+    (id) => {
+      if (ensureHydrated()) setSelectedId(id);
+    },
+    [ensureHydrated],
+  );
+
+  const changeCategory = useCallback(
+    (category) => {
+      if (ensureHydrated()) setActiveCategory(category);
+    },
+    [ensureHydrated],
+  );
+
+  const toggleFavorite = useCallback(
+    (id) => {
+      if (!ensureHydrated()) return;
+      commitItems(
+        itemsRef.current.map((item) =>
+          item.id === id ? { ...item, favorite: !item.favorite } : item,
+        ),
+      );
+    },
+    [commitItems, ensureHydrated],
+  );
+
+  const removeMedia = useCallback(
+    (id) => {
+      if (!ensureHydrated()) return;
+      const previous = itemsRef.current;
+      const index = previous.findIndex((item) => item.id === id);
+      const item = previous[index];
+      if (!item || item.isDemo) return;
+
+      const remaining = previous.filter((entry) => entry.id !== id);
+      sourceKeysRef.current.delete(item.sourceKey);
+      commitItems(remaining);
+      if (selectedId === id) {
+        setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id ?? DEMO_ITEMS[0].id);
+      }
+      if (item.objectUrl) {
+        objectUrlsRef.current.delete(item.src);
+        window.setTimeout(() => URL.revokeObjectURL(item.src), 0);
+      } else if (item.filePath) {
+        window.setTimeout(() => {
+          void releaseDesktopMedia([item.filePath]);
+        }, 0);
+      }
+      showFeedback("success", `已移除 ${item.name}`, { source: "library" });
+    },
+    [commitItems, ensureHydrated, selectedId, showFeedback],
+  );
 
   const handleDrop = useCallback(
     async (event) => {
@@ -174,30 +603,34 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
       setIsDragging(false);
       const files = Array.from(event.dataTransfer.files ?? []);
       if (!files.length) return;
+      if (!ensureHydrated()) return;
 
       try {
         const desktopResult = await resolveDroppedDesktopMedia(files);
         if (desktopResult !== null) {
-          addDesktopFiles(desktopResult.files, desktopResult);
+          await addDesktopFiles(desktopResult.files, desktopResult);
           return;
         }
-        addBrowserFiles(files);
+        await addBrowserFiles(files);
       } catch (error) {
         showFeedback("error", error instanceof Error ? error.message : "无法导入拖入的素材", {
           source: "upload",
         });
       }
     },
-    [addBrowserFiles, addDesktopFiles, showFeedback],
+    [addBrowserFiles, addDesktopFiles, ensureHydrated, showFeedback],
   );
 
-  const handleDragEnter = useCallback((event) => {
-    event.preventDefault();
-    if (!event.dataTransfer.types?.includes("Files")) return;
-    dragDepthRef.current += 1;
-    event.dataTransfer.dropEffect = "copy";
-    setIsDragging(true);
-  }, []);
+  const handleDragEnter = useCallback(
+    (event) => {
+      event.preventDefault();
+      if (!event.dataTransfer.types?.includes("Files") || !isHydrated) return;
+      dragDepthRef.current += 1;
+      event.dataTransfer.dropEffect = "copy";
+      setIsDragging(true);
+    },
+    [isHydrated],
+  );
 
   const handleDragOver = useCallback((event) => {
     event.preventDefault();
@@ -211,7 +644,6 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     if (dragDepthRef.current === 0) setIsDragging(false);
   }, []);
 
-  // Revoke object URLs created for browser uploads when the library unmounts.
   useEffect(
     () => () => {
       objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -222,18 +654,19 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
   return {
     items,
     media,
+    isHydrated,
     selectedId,
-    setSelectedId,
+    setSelectedId: selectMedia,
     activeCategory,
-    setActiveCategory,
+    setActiveCategory: changeCategory,
     isLibraryOpen,
     setLibraryOpen,
     isDragging,
     fileInputRef,
     addBrowserFiles,
-    addDesktopFiles,
     openFilePicker,
     toggleFavorite,
+    removeMedia,
     handleDrop,
     handleDragEnter,
     handleDragOver,

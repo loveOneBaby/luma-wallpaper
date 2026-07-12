@@ -2,9 +2,16 @@ import { CloudArrowUpIcon, SquaresFourIcon } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_LIBRARY_BUTTON, GLASS_UPLOAD_BUTTON } from "./glassPresets.js";
 
-export function Topbar({ isLibraryOpen, onToggleLibrary, onUpload, platformLabel }) {
+export function Topbar({
+  isLibraryOpen,
+  onToggleLibrary,
+  onUpload,
+  platformLabel,
+  isLibraryReady = true,
+  inert = false,
+}) {
   return (
-    <header className="topbar">
+    <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
       <div className="brand">Luma</div>
       <div className="topbar-actions">
         <GlassSurface
@@ -29,7 +36,9 @@ export function Topbar({ isLibraryOpen, onToggleLibrary, onUpload, platformLabel
           className="upload-button liquid-glass"
           type="button"
           onClick={onUpload}
-          aria-label="上传图片或视频"
+          disabled={!isLibraryReady}
+          aria-label={isLibraryReady ? "上传图片或视频" : "正在恢复媒体库"}
+          title={isLibraryReady ? undefined : "正在恢复媒体库，请稍候"}
         >
           <CloudArrowUpIcon size={22} weight="regular" aria-hidden="true" />
           <span>上传图片或视频</span>

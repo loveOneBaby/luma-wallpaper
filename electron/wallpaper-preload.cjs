@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld(
   "lumaWallpaper",
@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld(
     },
     onMediaChanged: (callback) => {
       if (typeof callback !== "function") return () => {};
-
       const listener = (_event, media) => callback(media);
       ipcRenderer.on("luma:wallpaper:media-changed", listener);
       return () => ipcRenderer.removeListener("luma:wallpaper:media-changed", listener);

@@ -1,6 +1,6 @@
 {
   "name": "luma-wallpaper",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A calm image and video wallpaper manager for macOS, Windows, and the web.",
   "author": "Luma",
   "repository": {
@@ -17,6 +17,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test",
+    "audit:ci": "npm audit --registry=https://registry.npmjs.org --audit-level=high",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -56,6 +58,15 @@
     "appId": "com.luma.wallpaper",
     "productName": "Luma",
     "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "resetAdHocDarwinSignature": true
+    },
     "asarUnpack": [
       "node_modules/wallpaper/source/**",
       "node_modules/koffi/build/**"
@@ -98,6 +109,7 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "artifactName": "Luma-${version}-${arch}-Setup.${ext}",
       "publish": [
         {
           "provider": "github",

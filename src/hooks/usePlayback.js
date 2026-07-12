@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// Images have no real timeline; simulate a 20s looping progress so the dock
-// slider and timecode stay meaningful for static wallpapers.
-const IMAGE_LOOP_DURATION = 20;
 const DEMO_VIDEO_START = 6;
-const PROGRESS_TICK_MS = 100;
 
 /**
  * Owns transport state (play/pause, mute, duration, currentTime) and the
@@ -16,8 +12,8 @@ const PROGRESS_TICK_MS = 100;
 export function usePlayback({ media }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
-  const [duration, setDuration] = useState(IMAGE_LOOP_DURATION);
-  const [currentTime, setCurrentTime] = useState(DEMO_VIDEO_START);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const videoRef = useRef(null);
 
   const progress = useMemo(
@@ -33,10 +29,10 @@ export function usePlayback({ media }) {
   useEffect(() => {
     if (prevMediaIdRef.current === media.id) return;
     prevMediaIdRef.current = media.id;
-    setCurrentTime(media.isDemo && media.kind === "video" ? DEMO_VIDEO_START : 0);
-    setDuration(media.kind === "image" ? IMAGE_LOOP_DURATION : 0);
+    setCurrentTime(0);
+    setDuration(0);
     setMuted(true);
-    setIsPlaying(true);
+    setIsPlaying(media.kind === "video");
   }, [media.id, media.kind, media.isDemo]);
 
   // Drive the underlying <video> from transport state.
@@ -48,24 +44,17 @@ export function usePlayback({ media }) {
     } else {
       videoRef.current.pause();
     }
-  }, [isPlaying, media, muted]);
-
-  // Simulated playback progress for static images.
-  useEffect(() => {
-    if (media.kind !== "image" || !isPlaying) return undefined;
-    const timer = window.setInterval(() => {
-      setCurrentTime((value) => (value + 0.1 >= IMAGE_LOOP_DURATION ? 0 : value + 0.1));
-    }, PROGRESS_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, [isPlaying, media.kind]);
+  }, [isPlaying, media.kind, media.src, muted]);
 
   const togglePlayback = useCallback(() => {
+    if (media.kind !== "video") return;
     setIsPlaying((value) => !value);
-  }, []);
+  }, [media.kind]);
 
   const toggleMuted = useCallback(() => {
+    if (media.kind !== "video") return;
     setMuted((value) => !value);
-  }, []);
+  }, [media.kind]);
 
   const seek = useCallback(
     (event) => {
@@ -81,7 +70,7 @@ export function usePlayback({ media }) {
   const handleLoadedMetadata = useCallback(
     (event) => {
       const video = event.currentTarget;
-      setDuration(video.duration || IMAGE_LOOP_DURATION);
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
       if (media.isDemo) {
         video.currentTime = Math.min(DEMO_VIDEO_START, video.duration || DEMO_VIDEO_START);
         setCurrentTime(video.currentTime);
@@ -98,6 +87,11 @@ export function usePlayback({ media }) {
 
   const handlePlay = useCallback(() => setIsPlaying(true), []);
   const handlePause = useCallback(() => setIsPlaying(false), []);
+  const handleVideoError = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, []);
 
   return {
     isPlaying,
@@ -113,5 +107,6 @@ export function usePlayback({ media }) {
     handleTimeUpdate,
     handlePlay,
     handlePause,
+    handleVideoError,
   };
 }

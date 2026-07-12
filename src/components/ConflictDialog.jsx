@@ -1,13 +1,66 @@
+import { useEffect, useRef } from "react";
 import { ArrowClockwiseIcon, PowerIcon, SpinnerGapIcon, XIcon } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_CONFLICT_PANEL } from "./glassPresets.js";
 
 export function ConflictDialog({ applyState, onClose, onRetry }) {
   const isApplying = applyState === "applying";
+  const layerRef = useRef(null);
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const frame = window.requestAnimationFrame(() => {
+      layerRef.current?.querySelector("[data-initial-focus]")?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus();
+      }
+    };
+  }, []);
+
+  const handleKeyDown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeRef.current();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      layerRef.current?.querySelectorAll(
+        'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    ).filter((element) => !element.closest("[inert]") && element.getClientRects().length > 0);
+    if (!focusable.length) {
+      event.preventDefault();
+      layerRef.current?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div
+      ref={layerRef}
       className="conflict-layer"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
       }}
@@ -51,7 +104,7 @@ export function ConflictDialog({ applyState, onClose, onRetry }) {
             type="button"
             onClick={onRetry}
             disabled={isApplying}
-            autoFocus
+            data-initial-focus
           >
             {isApplying ? (
               <SpinnerGapIcon size={19} weight="bold" aria-hidden="true" />

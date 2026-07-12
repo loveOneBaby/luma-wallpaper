@@ -18,7 +18,7 @@ function getPlatformLabel(platform) {
 }
 
 export function App() {
-  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const stageRef = useRef(null);
 
   // Hook chain is dependency-ordered and acyclic: status has no args (media is
@@ -27,6 +27,7 @@ export function App() {
   const {
     feedback,
     applyState,
+    hasWallpaperRecovery,
     isConflictOpen,
     setConflictOpen,
     showFeedback,
@@ -39,6 +40,7 @@ export function App() {
   const {
     items,
     media,
+    isHydrated,
     selectedId,
     setSelectedId,
     activeCategory,
@@ -50,6 +52,7 @@ export function App() {
     addBrowserFiles,
     openFilePicker,
     toggleFavorite,
+    removeMedia,
     handleDrop,
     handleDragEnter,
     handleDragOver,
@@ -70,44 +73,51 @@ export function App() {
     handleTimeUpdate,
     handlePlay,
     handlePause,
+    handleVideoError,
   } = usePlayback({ media });
 
   const platform = getDesktopPlatform();
 
   const toggleFullscreen = useCallback(async () => {
-    setLibraryOpen(false);
-    setIsFocusMode((value) => !value);
     try {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
       } else {
-        await stageRef.current?.requestFullscreen();
+        if (!stageRef.current?.requestFullscreen) throw new Error("fullscreen-unavailable");
+        await stageRef.current.requestFullscreen();
+        setLibraryOpen(false);
       }
     } catch {
-      // Fullscreen can be declined by the browser; the preview remains usable.
+      showFeedback("warning", "无法进入全屏，请检查浏览器或系统权限", {
+        source: "preview",
+      });
     }
-  }, [setLibraryOpen]);
+  }, [setLibraryOpen, showFeedback]);
 
-  // Esc exits focus mode and the conflict dialog; Space toggles playback
-  // unless an input/button is focused.
+  // Esc closes the shelf; the modal owns its own Escape handling and focus
+  // trap. Space toggles video playback unless an interactive control is active.
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        setIsFocusMode(false);
-        setConflictOpen(false);
+        setLibraryOpen(false);
       }
-      const tag = event.target?.tagName;
-      if (event.code !== "Space" || tag === "INPUT" || tag === "BUTTON") return;
+      if (event.code !== "Space" || isConflictOpen) return;
+      if (event.target instanceof Element) {
+        const interactive = event.target.closest(
+          'button, input, select, textarea, a, [contenteditable="true"], [role="button"]',
+        );
+        if (interactive) return;
+      }
       event.preventDefault();
       togglePlayback();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlayback, setConflictOpen]);
+  }, [isConflictOpen, setLibraryOpen, togglePlayback]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) setIsFocusMode(false);
+      setIsFullscreen(document.fullscreenElement === stageRef.current);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -116,24 +126,26 @@ export function App() {
   return (
     <main
       ref={stageRef}
-      className={`app-shell ${isDragging ? "is-dragging" : ""} ${isFocusMode ? "is-focus-mode" : ""} ${isLibraryOpen ? "has-library-open" : ""}`}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      className={`app-shell ${isDragging ? "is-dragging" : ""} ${isFullscreen ? "is-focus-mode" : ""} ${isLibraryOpen ? "has-library-open" : ""}`}
+      onDragEnter={isConflictOpen ? undefined : handleDragEnter}
+      onDragOver={isConflictOpen ? undefined : handleDragOver}
+      onDragLeave={isConflictOpen ? undefined : handleDragLeave}
+      onDrop={isConflictOpen ? undefined : handleDrop}
     >
       <MediaStage
         media={media}
         videoRef={videoRef}
         muted={muted}
-        isPlaying={isPlaying}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onPlay={handlePlay}
         onPause={handlePause}
-        onVideoError={() =>
-          showFeedback("error", "视频无法预览，可能是不支持的编码", { source: "upload" })
-        }
+        onVideoError={() => {
+          handleVideoError();
+          showFeedback("error", "视频无法预览，可能是不支持的编码", {
+            source: "upload",
+          });
+        }}
         onImageError={() =>
           showFeedback("error", "图片无法预览，请检查文件格式", { source: "upload" })
         }
@@ -146,6 +158,8 @@ export function App() {
         onToggleLibrary={() => setLibraryOpen((value) => !value)}
         onUpload={openFilePicker}
         platformLabel={getPlatformLabel(platform)}
+        isLibraryReady={isHydrated}
+        inert={isFullscreen || isConflictOpen}
       />
 
       <input
@@ -154,10 +168,11 @@ export function App() {
         type="file"
         accept="image/*,video/*"
         multiple
+        disabled={!isHydrated}
         tabIndex="-1"
         aria-hidden="true"
         onChange={(event) => {
-          addBrowserFiles(event.target.files);
+          void addBrowserFiles(event.target.files);
           event.target.value = "";
         }}
       />
@@ -165,12 +180,14 @@ export function App() {
       <StatusToast
         feedback={feedback}
         platform={platform}
+        hasWallpaperRecovery={hasWallpaperRecovery}
         onReportConflict={() => setConflictOpen(true)}
         onInstallUpdate={handleInstallUpdate}
         onDismissUpdate={dismissUpdate}
+        inert={isFullscreen || isConflictOpen}
       />
 
-      <div className="file-name" title={media.name}>
+      <div className="file-name" title={media.name} aria-hidden="true">
         {media.name}
       </div>
 
@@ -182,7 +199,10 @@ export function App() {
           onCategoryChange={setActiveCategory}
           onSelect={setSelectedId}
           onToggleFavorite={toggleFavorite}
+          onRemove={removeMedia}
           onUpload={openFilePicker}
+          isReady={isHydrated}
+          inert={isConflictOpen}
         />
       ) : null}
 
@@ -196,8 +216,12 @@ export function App() {
         muted={muted}
         onToggleMute={toggleMuted}
         onToggleFullscreen={toggleFullscreen}
+        isFullscreen={isFullscreen}
+        mediaKind={media.kind}
+        platform={platform}
         applyState={applyState}
         onApply={() => handleApplyWallpaper(media, false)}
+        inert={isConflictOpen}
       />
 
       {isConflictOpen ? (
@@ -211,11 +235,11 @@ export function App() {
       <DropLayer visible={isDragging} />
 
       <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
-        {isDragging
-          ? "可以松开鼠标上传图片或视频"
-          : feedback?.source === "upload"
-            ? feedback.message
-            : ""}
+        {isConflictOpen
+          ? ""
+          : isDragging
+            ? "可以松开鼠标上传图片或视频"
+            : (feedback?.message ?? "")}
       </div>
     </main>
   );

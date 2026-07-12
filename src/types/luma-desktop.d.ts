@@ -16,6 +16,25 @@ export interface DesktopMediaFile {
   kind: MediaKind;
 }
 
+export interface LibraryItemState {
+  id: string;
+  name?: string;
+  kind?: MediaKind;
+  favorite: boolean;
+  isDemo: boolean;
+  demoKey?: string | null;
+  sourceKey?: string;
+  filePath?: string | null;
+  src?: string;
+}
+
+export interface LibraryState {
+  version: 1;
+  items: LibraryItemState[];
+  selectedId: string | null;
+  activeCategory: "all" | "image" | "video" | "favorite" | "images" | "videos" | "favorites";
+}
+
 export type WallpaperVerification = "verified" | "conflict" | "unverified" | "playing";
 
 export interface SetWallpaperRequest {
@@ -47,6 +66,8 @@ export interface ResolveDroppedMediaResult {
 export interface PickMediaResult {
   canceled: boolean;
   files: DesktopMediaFile[];
+  duplicateCount?: number;
+  rejectedCount?: number;
 }
 
 export type UpdateStateValue =
@@ -68,6 +89,7 @@ export interface UpdateState {
   percent?: number | null;
   message?: string | null;
   lastError?: string | null;
+  lastCheckedAt?: string | null;
 }
 
 export interface LumaDesktopBridge {
@@ -75,10 +97,24 @@ export interface LumaDesktopBridge {
   readonly platform: string;
   pickMedia(): Promise<PickMediaResult | DesktopMediaFile[] | null>;
   resolveDroppedMedia(files: File[]): Promise<ResolveDroppedMediaResult | null>;
+  loadLibraryState(): Promise<LibraryState>;
+  saveLibraryState(state: LibraryState): Promise<{ ok: boolean; saved: number }>;
+  releaseMedia(paths: string[]): Promise<{ ok: boolean; released: number }>;
   setWallpaper(request: SetWallpaperRequest): Promise<SetWallpaperResult>;
   getUpdateState(): Promise<UpdateState | null>;
+  checkForUpdates(): Promise<UpdateState | null>;
   installUpdate(): Promise<{ ok: boolean; message?: string }>;
+  getOpenAtLogin(): Promise<{ supported: boolean; openAtLogin: boolean }>;
+  setOpenAtLogin(openAtLogin: boolean): Promise<{
+    ok: boolean;
+    supported: boolean;
+    openAtLogin: boolean;
+  }>;
   onUpdateState(callback: (state: UpdateState) => void): () => void;
+  onPlaybackError(callback: (error: { code: string; message: string }) => void): () => void;
+  onWallpaperRuntimeState?(
+    callback: (error: { code?: string; message?: string } | string) => void,
+  ): () => void;
 }
 
 export interface WallpaperMedia extends DesktopMediaFile {

@@ -11,7 +11,30 @@ export async function pickDesktopMedia() {
 
   const result = await bridge.pickMedia();
   const files = Array.isArray(result) ? result : result?.files;
-  return Array.isArray(files) ? files : [];
+  return {
+    canceled: Array.isArray(result) ? false : result?.canceled === true,
+    files: Array.isArray(files) ? files : [],
+    duplicateCount: Number.isFinite(result?.duplicateCount)
+      ? Math.max(0, Math.floor(result.duplicateCount))
+      : 0,
+    rejectedCount: Number.isFinite(result?.rejectedCount)
+      ? Math.max(0, Math.floor(result.rejectedCount))
+      : 0,
+  };
+}
+
+export function subscribeWallpaperRuntime(callback) {
+  const bridge = getBridge();
+  if (typeof callback !== "function") return () => {};
+  if (bridge?.onPlaybackError) return bridge.onPlaybackError(callback);
+  if (bridge?.onWallpaperRuntimeState) return bridge.onWallpaperRuntimeState(callback);
+  return () => {};
+}
+
+export async function releaseDesktopMedia(paths) {
+  const bridge = getBridge();
+  if (!bridge?.releaseMedia) return { ok: false, released: 0 };
+  return bridge.releaseMedia(Array.from(paths ?? []).filter(Boolean));
 }
 
 export async function applyDesktopWallpaper(media, { force = false } = {}) {
