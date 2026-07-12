@@ -1,0 +1,16 @@
+node_modules/
+.npm-cache/
+dist/
+release/
+.qa/
+design-qa.md
+AGENTS.md
+
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+
+build/Luma.iconset/
+build/icon-64-preview.png

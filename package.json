@@ -1,0 +1,103 @@
+{
+  "name": "luma-wallpaper",
+  "version": "0.1.2",
+  "description": "A calm image and video wallpaper manager for macOS, Windows, and the web.",
+  "author": "Luma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/loveOneBaby/luma-wallpaper.git"
+  },
+  "homepage": "https://github.com/loveOneBaby/luma-wallpaper#readme",
+  "bugs": {
+    "url": "https://github.com/loveOneBaby/luma-wallpaper/issues"
+  },
+  "private": true,
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "desktop:renderer": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "desktop:electron": "wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron electron/main.mjs",
+    "desktop:dev": "concurrently -k -s first \"npm:desktop:renderer\" \"npm:desktop:electron\"",
+    "desktop:build": "npm run build && electron-builder",
+    "desktop:build:mac": "npm run build && electron-builder --mac",
+    "desktop:build:win": "npm run build && electron-builder --win --x64"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "5.0.4",
+    "koffi": "^3.1.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2",
+    "wallpaper": "^7.3.1"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "wait-on": "^9.0.10"
+  },
+  "allowScripts": {
+    "electron@43.1.0": true,
+    "electron-winstaller@5.4.0": true,
+    "koffi@3.1.1": true,
+    "esbuild@0.25.12": true,
+    "fsevents@2.3.3": true
+  },
+  "build": {
+    "appId": "com.luma.wallpaper",
+    "productName": "Luma",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/wallpaper/source/**",
+      "node_modules/koffi/build/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/ocean-morning.mp4",
+        "to": "demo-assets/ocean-morning.mp4"
+      },
+      {
+        "from": "src/assets/ocean-morning.png",
+        "to": "demo-assets/ocean-morning.png"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.lifestyle",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "optionalDependencies": {
+    "@koromix/koffi-win32-x64": "^3.1.1"
+  }
+}
