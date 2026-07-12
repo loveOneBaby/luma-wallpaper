@@ -57,6 +57,14 @@ function requestHeaders(token, api = false) {
   };
 }
 
+// Release asset download URLs (github.com/<owner>/<repo>/releases/download/<tag>/<file>)
+// reject the auto-generated GITHUB_TOKEN Bearer header with HTTP 401. For a public
+// repo the anonymous redirect (302 -> CDN) confirms downloadability; API calls
+// still authenticate through requestHeaders(token).
+function downloadHeaders() {
+  return requestHeaders(null);
+}
+
 async function fetchApiJson(apiPath, token) {
   const response = await fetchWithRetry(`https://api.github.com${apiPath}`, {
     headers: requestHeaders(token, true),
@@ -131,7 +139,7 @@ export async function verifyGitHubRelease(options) {
       if (asset.digest !== `sha256:${localDigest}`) throw new Error(`${name} 上传后 sha256 不一致`);
       await fetchWithRetry(asset.browser_download_url, {
         method: "HEAD",
-        headers: requestHeaders(options.token),
+        headers: downloadHeaders(),
       });
     }),
   );
@@ -139,7 +147,7 @@ export async function verifyGitHubRelease(options) {
   for (const manifestName of manifestNames) {
     const asset = assets.get(manifestName);
     const response = await fetchWithRetry(asset.browser_download_url, {
-      headers: requestHeaders(options.token),
+      headers: downloadHeaders(),
     });
     const remoteText = await response.text();
     const localText = await readFile(path.join(localDirectory, manifestName), "utf8");
