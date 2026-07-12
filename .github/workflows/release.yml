@@ -280,6 +280,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require artifacts-repository token
+        shell: bash
+        env:
+          HAS_RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
+        run: |
+          if [[ "$HAS_RELEASES_TOKEN" != "true" ]]; then
+            echo "RELEASES_TOKEN secret is required to publish artifacts to loveOneBaby/luma-releases."
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
@@ -298,27 +308,36 @@ jobs:
       - name: Validate merged update artifacts
         run: node scripts/validate-update-artifacts.mjs --dir release-assets
 
-      - name: Create or update release
+      - name: Generate release notes from source repository
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh api --method POST "/repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body > release-notes.md 2>/dev/null && [[ -s release-notes.md ]]; then
+            :
+          else
+            echo "Release artifacts for Luma $GITHUB_REF_NAME. See https://github.com/loveOneBaby/luma-wallpaper/releases for the source history." > release-notes.md
+          fi
+
+      - name: Publish release to artifacts repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_REPO: loveOneBaby/luma-releases
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
           else
             gh release create "$GITHUB_REF_NAME" release-assets/* \
-              --verify-tag \
-              --generate-notes \
-              --title "Luma $GITHUB_REF_NAME"
+              --title "Luma $GITHUB_REF_NAME" \
+              --notes-file release-notes.md
           fi
 
       - name: Verify published release through GitHub API and HTTP
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           node scripts/verify-github-release.mjs \
-            --repo "$GITHUB_REPOSITORY" \
+            --repo loveOneBaby/luma-releases \
             --tag "$GITHUB_REF_NAME" \
-            --expected-sha "$GITHUB_SHA" \
             --local-dir release-assets
