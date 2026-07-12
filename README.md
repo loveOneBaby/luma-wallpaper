@@ -24,7 +24,7 @@
 
 ## 下载
 
-稳定版本从 Cloudflare R2 公开存储下载；`v0.1.5` 及更早版本仍在[源仓库 release 页](https://github.com/loveOneBaby/luma-wallpaper/releases)：
+稳定版本从 Cloudflare R2 公开存储下载（[pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev](https://pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev)）；`v0.1.5` 及更早版本仍在[源仓库 release 页](https://github.com/loveOneBaby/luma-wallpaper/releases)：
 
 - macOS Apple Silicon：DMG 或 ZIP
 - macOS Intel：DMG 或 ZIP

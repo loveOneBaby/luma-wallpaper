@@ -97,7 +97,7 @@
       "publish": [
         {
           "provider": "generic",
-          "url": "https://r2-public-url.invalid",
+          "url": "https://pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev",
           "channel": "latest-${arch}"
         }
       ],
@@ -112,7 +112,7 @@
       "publish": [
         {
           "provider": "generic",
-          "url": "https://r2-public-url.invalid",
+          "url": "https://pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev",
           "channel": "latest"
         }
       ],
