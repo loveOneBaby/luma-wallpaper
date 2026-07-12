@@ -4,6 +4,7 @@ import {
   ArrowsOutIcon,
   CheckIcon,
   CloudArrowUpIcon,
+  DownloadSimpleIcon,
   MonitorArrowUpIcon,
   PauseIcon,
   PlayIcon,
@@ -24,6 +25,17 @@ import {
   getDesktopPlatform,
   pickDesktopMedia,
 } from "./services/desktopWallpaper.js";
+import {
+  getDesktopUpdateState,
+  installDesktopUpdate,
+  resolveDroppedDesktopMedia,
+  subscribeDesktopUpdates,
+} from "./services/desktopUpdates.js";
+
+const IMAGE_EXTENSIONS = new Set([
+  "avif", "bmp", "gif", "heic", "heif", "jpeg", "jpg", "png", "tif", "tiff", "webp",
+]);
+const VIDEO_EXTENSIONS = new Set(["avi", "m4v", "mkv", "mov", "mp4", "webm", "wmv"]);
 
 const DEMO_ITEMS = [
   {
@@ -35,6 +47,7 @@ const DEMO_ITEMS = [
     objectUrl: false,
     isDemo: true,
     demoKey: "ocean-morning-video",
+    sourceKey: "demo:ocean-morning-video",
   },
   {
     id: "demo-image",
@@ -45,6 +58,7 @@ const DEMO_ITEMS = [
     objectUrl: false,
     isDemo: true,
     demoKey: "ocean-morning-image",
+    sourceKey: "demo:ocean-morning-image",
   },
 ];
 
@@ -66,6 +80,18 @@ function getPlatformLabel(platform) {
   return "Web · Windows · macOS";
 }
 
+function browserMediaKind(file) {
+  if (!file || !Number.isFinite(file.size) || file.size <= 0) return null;
+  const extension = file.name?.split(".").pop()?.toLowerCase() ?? "";
+  if (IMAGE_EXTENSIONS.has(extension)) return "image";
+  if (VIDEO_EXTENSIONS.has(extension)) return "video";
+  return null;
+}
+
+function browserSourceKey(file, kind) {
+  return `browser:${kind}:${file.name.toLowerCase()}:${file.size}:${file.lastModified ?? 0}`;
+}
+
 export function App() {
   const [items, setItems] = useState(DEMO_ITEMS);
   const [selectedId, setSelectedId] = useState(DEMO_ITEMS[0].id);
@@ -78,7 +104,7 @@ export function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [applyState, setApplyState] = useState("idle");
-  const [statusMessage, setStatusMessage] = useState("");
+  const [feedback, setFeedback] = useState(null);
   const [isConflictOpen, setConflictOpen] = useState(() => (
     import.meta.env.DEV
       && new URLSearchParams(window.location.search).get("previewState") === "conflict"
@@ -89,6 +115,8 @@ export function App() {
   const stageRef = useRef(null);
   const objectUrlsRef = useRef(new Set());
   const statusTimerRef = useRef(null);
+  const dragDepthRef = useRef(0);
+  const readyUpdateRef = useRef(null);
 
   const media = items.find((item) => item.id === selectedId) ?? items[0];
   const platform = getDesktopPlatform();
@@ -98,15 +126,52 @@ export function App() {
     [currentTime, duration],
   );
 
-  const showStatus = useCallback((state, message) => {
+  const showFeedback = useCallback((tone, message, options = {}) => {
+    const source = options.source ?? "system";
+    const duration = options.persistent
+      ? null
+      : options.duration ?? (tone === "success" ? 6200 : 4800);
     window.clearTimeout(statusTimerRef.current);
-    setApplyState(state);
-    setStatusMessage(message);
-    statusTimerRef.current = window.setTimeout(() => {
-      setApplyState("idle");
-      setStatusMessage("");
-    }, state === "success" ? 7200 : 4600);
+    if (source !== "wallpaper") {
+      setApplyState((state) => (state === "applying" ? state : "idle"));
+    }
+    setFeedback({ tone, message, source, ...options });
+    if (duration !== null) {
+      statusTimerRef.current = window.setTimeout(() => {
+        if (source === "wallpaper") setApplyState("idle");
+        const readyUpdate = readyUpdateRef.current;
+        setFeedback(readyUpdate ? {
+          tone: "success",
+          message: readyUpdate.message ?? "新版本已准备好",
+          source: "update",
+          persistent: true,
+          updateState: readyUpdate,
+        } : null);
+      }, duration);
+    }
   }, []);
+
+  const showApplyStatus = useCallback((state, message, options = {}) => {
+    setApplyState(state);
+    showFeedback(state, message, { ...options, source: "wallpaper" });
+  }, [showFeedback]);
+
+  const showUploadResult = useCallback(({ added, duplicates = 0, rejected = 0 }) => {
+    if (added > 0) {
+      const skipped = duplicates + rejected;
+      showFeedback(
+        skipped > 0 ? "warning" : "success",
+        `已添加 ${added} 个素材${skipped > 0 ? `，跳过 ${skipped} 个` : ""}`,
+        { source: "upload" },
+      );
+      return;
+    }
+    if (duplicates > 0) {
+      showFeedback("info", "这个素材已经在媒体库中", { source: "upload" });
+      return;
+    }
+    showFeedback("error", "没有可用素材，请拖入支持的图片或视频", { source: "upload" });
+  }, [showFeedback]);
 
   const selectMedia = useCallback((id, nextItems = null) => {
     const source = nextItems ?? items;
@@ -121,60 +186,98 @@ export function App() {
   }, [items]);
 
   const addBrowserFiles = useCallback((fileList) => {
-    const nextItems = Array.from(fileList ?? [])
-      .filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"))
-      .map((file) => {
-        const src = URL.createObjectURL(file);
-        objectUrlsRef.current.add(src);
-        return {
-          id: createId(),
-          src,
-          name: file.name,
-          kind: file.type.startsWith("video/") ? "video" : "image",
-          favorite: false,
-          objectUrl: true,
-          isDemo: false,
-          file,
-        };
+    const existingKeys = new Set(items.map((item) => item.sourceKey).filter(Boolean));
+    const batchKeys = new Set();
+    const nextItems = [];
+    let duplicates = 0;
+    let rejected = 0;
+
+    for (const file of Array.from(fileList ?? [])) {
+      const kind = browserMediaKind(file);
+      if (!kind) {
+        rejected += 1;
+        continue;
+      }
+      const sourceKey = browserSourceKey(file, kind);
+      if (existingKeys.has(sourceKey) || batchKeys.has(sourceKey)) {
+        duplicates += 1;
+        continue;
+      }
+      batchKeys.add(sourceKey);
+      const src = URL.createObjectURL(file);
+      objectUrlsRef.current.add(src);
+      nextItems.push({
+        id: createId(),
+        src,
+        name: file.name,
+        kind,
+        favorite: false,
+        objectUrl: true,
+        isDemo: false,
+        sourceKey,
+        file,
       });
+    }
 
+    showUploadResult({ added: nextItems.length, duplicates, rejected });
     if (!nextItems.length) return;
     setItems((previous) => [...previous, ...nextItems]);
     selectMedia(nextItems[0].id, nextItems);
     setLibraryOpen(true);
-  }, [selectMedia]);
+  }, [items, selectMedia, showUploadResult]);
 
-  const addDesktopFiles = useCallback((files) => {
-    const nextItems = (files ?? []).map((file) => ({
-      id: createId(),
-      src: file.url,
-      name: file.name,
-      kind: file.kind,
-      favorite: false,
-      objectUrl: false,
-      isDemo: false,
-      filePath: file.path,
-    }));
+  const addDesktopFiles = useCallback((files, counts = {}) => {
+    const existingKeys = new Set(items.map((item) => item.sourceKey).filter(Boolean));
+    const batchKeys = new Set();
+    let duplicates = counts.duplicateCount ?? 0;
+    const nextItems = [];
 
+    for (const file of files ?? []) {
+      const sourceKey = `desktop:${file.identity ?? file.path}`;
+      if (existingKeys.has(sourceKey) || batchKeys.has(sourceKey)) {
+        duplicates += 1;
+        continue;
+      }
+      batchKeys.add(sourceKey);
+      nextItems.push({
+        id: createId(),
+        src: file.url,
+        name: file.name,
+        kind: file.kind,
+        favorite: false,
+        objectUrl: false,
+        isDemo: false,
+        sourceKey,
+        filePath: file.path,
+      });
+    }
+
+    showUploadResult({
+      added: nextItems.length,
+      duplicates,
+      rejected: counts.rejectedCount ?? 0,
+    });
     if (!nextItems.length) return;
     setItems((previous) => [...previous, ...nextItems]);
     selectMedia(nextItems[0].id, nextItems);
     setLibraryOpen(true);
-  }, [selectMedia]);
+  }, [items, selectMedia, showUploadResult]);
 
   const openFilePicker = useCallback(async () => {
     try {
       const desktopFiles = await pickDesktopMedia();
       if (desktopFiles !== null) {
-        addDesktopFiles(desktopFiles);
+        if (desktopFiles.length > 0) addDesktopFiles(desktopFiles);
         return;
       }
     } catch (error) {
-      showStatus("error", error instanceof Error ? error.message : "无法打开文件");
+      showFeedback("error", error instanceof Error ? error.message : "无法打开文件", {
+        source: "upload",
+      });
       return;
     }
     fileInputRef.current?.click();
-  }, [addDesktopFiles, showStatus]);
+  }, [addDesktopFiles, showFeedback]);
 
   const togglePlayback = useCallback(() => {
     setIsPlaying((value) => !value);
@@ -199,17 +302,75 @@ export function App() {
     window.clearTimeout(statusTimerRef.current);
     if (force) setConflictOpen(false);
     setApplyState("applying");
-    setStatusMessage(
-      force
-        ? "正在重新应用壁纸…"
-        : media.kind === "video"
-          ? "正在启动动态壁纸…"
-          : "正在设置桌面壁纸…",
-    );
+    setFeedback({
+      tone: "applying",
+      source: "wallpaper",
+      message:
+        force
+          ? "正在重新应用壁纸…"
+          : media.kind === "video"
+            ? "正在启动动态壁纸…"
+            : "正在设置桌面壁纸…",
+    });
     const result = await applyDesktopWallpaper(media, { force });
     if (result.status === "conflict") setConflictOpen(true);
-    showStatus(result.status, result.message);
-  }, [applyState, media, showStatus]);
+    showApplyStatus(result.status, result.message);
+  }, [applyState, media, showApplyStatus]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    readyUpdateRef.current = null;
+    showFeedback("installing", "正在关闭旧版本并安装更新…", {
+      source: "update",
+      persistent: true,
+    });
+    try {
+      const result = await installDesktopUpdate();
+      if (result?.ok === false) {
+        showFeedback("error", result.message ?? "更新尚未准备好", { source: "update" });
+      }
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : "无法开始安装更新", {
+        source: "update",
+      });
+    }
+  }, [showFeedback]);
+
+  useEffect(() => {
+    let active = true;
+    const handleUpdateState = (state) => {
+      if (!active || !state?.state) return;
+      if (state.state === "available" || state.state === "downloading") {
+        showFeedback("updating", state.message ?? "正在下载新版本…", {
+          source: "update",
+          persistent: true,
+          updateState: state,
+        });
+      } else if (state.state === "ready") {
+        readyUpdateRef.current = state;
+        showFeedback("success", state.message ?? "新版本已准备好", {
+          source: "update",
+          persistent: true,
+          updateState: state,
+        });
+      } else if (state.state === "installing") {
+        readyUpdateRef.current = null;
+        showFeedback("installing", state.message ?? "正在安装更新…", {
+          source: "update",
+          persistent: true,
+          updateState: state,
+        });
+      } else if (state.state === "error" && state.message) {
+        showFeedback("error", `更新失败：${state.message}`, { source: "update", duration: 7200 });
+      }
+    };
+
+    const unsubscribe = subscribeDesktopUpdates(handleUpdateState);
+    getDesktopUpdateState().then(handleUpdateState).catch(() => {});
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [showFeedback]);
 
   useEffect(() => {
     if (media.kind !== "video" || !videoRef.current) return;
@@ -284,24 +445,52 @@ export function App() {
     }
   };
 
-  const handleDrop = (event) => {
+  const handleDrop = async (event) => {
     event.preventDefault();
+    dragDepthRef.current = 0;
     setIsDragging(false);
-    addBrowserFiles(event.dataTransfer.files);
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (!files.length) return;
+
+    try {
+      const desktopResult = await resolveDroppedDesktopMedia(files);
+      if (desktopResult !== null) {
+        addDesktopFiles(desktopResult.files, desktopResult);
+        return;
+      }
+      addBrowserFiles(files);
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : "无法导入拖入的素材", {
+        source: "upload",
+      });
+    }
+  };
+
+  const handleDragEnter = (event) => {
+    event.preventDefault();
+    if (!event.dataTransfer.types?.includes("Files")) return;
+    dragDepthRef.current += 1;
+    event.dataTransfer.dropEffect = "copy";
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    if (!event.dataTransfer.types?.includes("Files")) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
   };
 
   return (
     <main
       ref={stageRef}
       className={`app-shell ${isDragging ? "is-dragging" : ""} ${isFocusMode ? "is-focus-mode" : ""} ${isLibraryOpen ? "has-library-open" : ""}`}
-      onDragEnter={(event) => {
+      onDragEnter={handleDragEnter}
+      onDragOver={(event) => {
         event.preventDefault();
-        setIsDragging(true);
+        if (event.dataTransfer.types?.includes("Files")) event.dataTransfer.dropEffect = "copy";
       }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragLeave={(event) => {
-        if (event.currentTarget === event.target) setIsDragging(false);
-      }}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <div className="media-stage" aria-label={`${media.name} 预览`}>
@@ -318,6 +507,9 @@ export function App() {
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
+            onError={() => showFeedback("error", "视频无法预览，可能是不支持的编码", {
+              source: "upload",
+            })}
           />
         ) : (
           <img
@@ -325,6 +517,9 @@ export function App() {
             className={`wallpaper-media wallpaper-image ${isPlaying ? "is-playing" : ""}`}
             src={media.src}
             alt="用户上传的壁纸预览"
+            onError={() => showFeedback("error", "图片无法预览，请检查文件格式", {
+              source: "upload",
+            })}
           />
         )}
       </div>
@@ -404,7 +599,7 @@ export function App() {
         }}
       />
 
-      {statusMessage ? (
+      {feedback?.message ? (
         <GlassSurface
           width={null}
           height={null}
@@ -420,20 +615,50 @@ export function App() {
           greenOffset={8}
           blueOffset={17}
           mixBlendMode="screen"
-          className={`status-toast liquid-glass is-${applyState}`}
+          className={`status-toast liquid-glass is-${feedback.tone}`}
           role="status"
           aria-live="polite"
         >
-          {applyState === "applying" && <SpinnerGapIcon size={19} weight="bold" aria-hidden="true" />}
-          {applyState === "success" && <CheckIcon size={19} weight="bold" aria-hidden="true" />}
-          {(applyState === "error" || applyState === "unsupported" || applyState === "conflict") && (
+          {(feedback.tone === "applying" || feedback.tone === "installing") && (
+            <SpinnerGapIcon size={19} weight="bold" aria-hidden="true" />
+          )}
+          {feedback.tone === "updating" && (
+            <DownloadSimpleIcon size={19} weight="bold" aria-hidden="true" />
+          )}
+          {(feedback.tone === "success" || feedback.tone === "info") && (
+            <CheckIcon size={19} weight="bold" aria-hidden="true" />
+          )}
+          {(
+            feedback.tone === "error"
+            || feedback.tone === "unsupported"
+            || feedback.tone === "conflict"
+            || feedback.tone === "warning"
+          ) && (
             <WarningCircleIcon size={19} weight="bold" aria-hidden="true" />
           )}
-          <span>{statusMessage}</span>
-          {applyState === "success" && platform ? (
+          <span>{feedback.message}</span>
+          {feedback.source === "wallpaper" && feedback.tone === "success" && platform ? (
             <button className="status-action" type="button" onClick={() => setConflictOpen(true)}>
               未生效？
             </button>
+          ) : null}
+          {feedback.source === "update" && feedback.updateState?.state === "ready" ? (
+            <>
+              <button className="status-action status-update" type="button" onClick={handleInstallUpdate}>
+                重启并更新
+              </button>
+              <button
+                className="status-dismiss"
+                type="button"
+                onClick={() => {
+                  readyUpdateRef.current = null;
+                  setFeedback(null);
+                }}
+                aria-label="稍后更新"
+              >
+                <XIcon size={15} weight="bold" aria-hidden="true" />
+              </button>
+            </>
           ) : null}
         </GlassSurface>
       ) : null}
@@ -622,10 +847,36 @@ export function App() {
       ) : null}
 
       <div className="drop-layer" aria-hidden={!isDragging}>
-        <div className="drop-message liquid-glass">
-          <CloudArrowUpIcon size={30} weight="regular" aria-hidden="true" />
-          <span>松开即可加入媒体库</span>
-        </div>
+        <GlassSurface
+          width={null}
+          height={null}
+          borderRadius={null}
+          borderWidth={0.08}
+          brightness={70}
+          opacity={0.9}
+          blur={10}
+          displace={0.62}
+          backgroundOpacity={0.045}
+          saturation={1.4}
+          distortionScale={-150}
+          redOffset={-5}
+          greenOffset={10}
+          blueOffset={21}
+          mixBlendMode="screen"
+          className="drop-message liquid-glass"
+        >
+          <div className="drop-icon" aria-hidden="true">
+            <CloudArrowUpIcon size={31} weight="regular" />
+          </div>
+          <div className="drop-copy">
+            <strong>松开即可加入媒体库</strong>
+            <span>支持图片与视频，可一次拖入多个文件</span>
+          </div>
+        </GlassSurface>
+      </div>
+
+      <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {isDragging ? "可以松开鼠标上传图片或视频" : feedback?.source === "upload" ? feedback.message : ""}
       </div>
     </main>
   );

@@ -13,12 +13,13 @@
 
 ## 功能
 
-- 上传并预览自己的图片和视频
+- 点击选择或拖拽上传自己的图片和视频
 - 按全部、图片、视频、收藏分类管理
 - 液态玻璃折射界面与响应式布局
 - macOS、Windows 图片壁纸设置
 - macOS、Windows 桌面层动态视频壁纸
 - 壁纸冲突检测、未生效提示与重新应用
+- 桌面端自动检测与下载更新，确认后关闭旧版本、安装并重新打开
 - Web 端安全预览，不伪装系统壁纸设置能力
 
 ## 下载
@@ -32,7 +33,7 @@
 
 也可以在 [Build and Release](https://github.com/loveOneBaby/luma-wallpaper/actions/workflows/release.yml) 页面手动运行流水线，并从对应运行记录下载构建产物。
 
-> 当前公开构建未进行 Apple Developer 公证或商业代码签名。macOS 首次打开时可能需要在系统安全设置中确认，Windows 也可能显示未知发布者提示。
+> 当前公开构建未进行 Apple Developer 公证或商业代码签名。macOS 首次打开时可能需要在系统安全设置中确认，Windows 也可能显示未知发布者提示。Windows 自动更新可使用未签名 NSIS 包；macOS 自动更新必须先配置 Developer ID 签名。
 
 ## 本地开发
 
@@ -60,11 +61,18 @@ npm run desktop:build:win
 推送 `v*` 标签会自动构建全部平台并创建 GitHub Release：
 
 ```bash
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 普通 `main` 分支推送和手动运行会生成可下载的 Actions Artifacts，但不会自动创建 Release。
+
+流水线会同时发布 Windows `latest.yml`、macOS 分架构更新清单和差分下载 blockmap。若要启用 macOS 自动更新及公证，请在仓库 Actions Secrets 中配置：
+
+- `MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`
+- `APPLE_API_KEY`（`.p8` 文件的 Base64 内容）、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`、`APPLE_TEAM_ID`
+
+`v0.1.2` 及更早版本本身没有更新模块，需要手动安装一次 `v0.1.3`；从该版本开始，后续版本可由应用内更新。
 
 ## 技术栈
 

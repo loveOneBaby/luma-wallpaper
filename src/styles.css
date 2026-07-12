@@ -599,13 +599,23 @@ button {
   color: #075d4f;
 }
 
+.status-toast.is-info,
+.status-toast.is-updating {
+  color: #075263;
+}
+
+.status-toast.is-warning {
+  color: #70501b;
+}
+
 .status-toast.is-error,
 .status-toast.is-unsupported,
 .status-toast.is-conflict {
   color: #703050;
 }
 
-.status-toast.is-applying svg,
+.status-toast.is-applying > .glass-surface__content > svg,
+.status-toast.is-installing > .glass-surface__content > svg,
 .apply-button.is-applying svg,
 .conflict-retry:disabled svg {
   animation: spin 850ms linear infinite;
@@ -626,6 +636,36 @@ button {
 
 .status-action:hover {
   background: rgba(255, 255, 255, 0.56);
+}
+
+.status-update {
+  min-height: 32px;
+  padding-inline: 13px;
+  color: #f5feff;
+  border-color: rgba(7, 70, 82, 0.34);
+  background: rgba(7, 70, 82, 0.82);
+}
+
+.status-update:hover {
+  background: rgba(7, 70, 82, 0.94);
+}
+
+.status-dismiss {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(9, 42, 52, 0.72);
+  background: transparent;
+  cursor: pointer;
+}
+
+.status-dismiss:hover {
+  background: rgba(255, 255, 255, 0.34);
 }
 
 .conflict-layer {
@@ -969,15 +1009,52 @@ button {
 }
 
 .drop-message {
-  width: min(320px, calc(100vw - 40px));
-  height: 128px;
+  width: min(390px, calc(100vw - 40px));
+  height: 142px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 13px;
-  border-radius: 42px;
+  padding: 16px 22px;
+  border-radius: 46px;
+  color: var(--ink);
+}
+
+.drop-message > .glass-surface__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.drop-icon {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.72);
+}
+
+.drop-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.drop-copy strong {
   font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.drop-copy span {
+  color: rgba(9, 42, 52, 0.68);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .visually-hidden {

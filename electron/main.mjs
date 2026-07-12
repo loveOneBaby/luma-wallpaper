@@ -3,6 +3,12 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, screen } from "electron";
+import {
+  getAutoUpdateState,
+  initializeAutoUpdates,
+  installDownloadedUpdate,
+  stopAutoUpdates,
+} from "./auto-update.mjs";
 import { attachWindowToWorkerW } from "./windows-workerw.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -138,10 +144,19 @@ function mediaUrl(filePath) {
 function mediaDescriptor(filePath) {
   return {
     path: filePath,
+    identity: comparablePath(filePath),
     url: mediaUrl(filePath),
     name: path.basename(filePath),
     kind: mediaKind(filePath),
   };
+}
+
+function isMainWindowSender(event) {
+  return Boolean(
+    mainWindow
+      && !mainWindow.isDestroyed()
+      && event?.sender?.id === mainWindow.webContents.id,
+  );
 }
 
 function registerMediaProtocol() {
@@ -444,6 +459,46 @@ function registerIpc() {
     };
   });
 
+  ipcMain.handle("luma:resolve-dropped-media", (event, payload) => {
+    if (!isMainWindowSender(event)) {
+      throw new Error("不允许从当前窗口导入文件");
+    }
+
+    const requestedPaths = Array.isArray(payload?.paths)
+      ? payload.paths.filter((filePath) => typeof filePath === "string" && filePath.trim())
+      : [];
+    const total = Number.isFinite(payload?.total)
+      ? Math.max(0, Math.floor(payload.total))
+      : requestedPaths.length;
+    const limitedPaths = requestedPaths.slice(0, 100);
+    const seen = new Set();
+    const files = [];
+    let duplicateCount = 0;
+    let rejectedCount = Math.max(0, total - requestedPaths.length)
+      + Math.max(0, requestedPaths.length - limitedPaths.length);
+
+    for (const requestedPath of limitedPaths) {
+      try {
+        const filePath = fs.realpathSync.native(requestedPath);
+        const identity = comparablePath(filePath);
+        if (!identity || seen.has(identity)) {
+          duplicateCount += 1;
+          continue;
+        }
+        if (!fs.statSync(filePath).isFile() || !mediaKind(filePath)) {
+          rejectedCount += 1;
+          continue;
+        }
+        seen.add(identity);
+        files.push(mediaDescriptor(filePath));
+      } catch {
+        rejectedCount += 1;
+      }
+    }
+
+    return { files, duplicateCount, rejectedCount };
+  });
+
   ipcMain.handle("luma:set-wallpaper", async (_event, request) => {
     if (process.platform !== "darwin" && process.platform !== "win32") {
       return {
@@ -495,6 +550,16 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle("luma:update:get-state", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口读取更新状态");
+    return getAutoUpdateState();
+  });
+
+  ipcMain.handle("luma:update:install", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口安装更新");
+    return installDownloadedUpdate();
+  });
+
   ipcMain.handle("luma:wallpaper:get-media", (event) => {
     if (!wallpaperWindow || event.sender.id !== wallpaperWindow.webContents.id) return null;
     return wallpaperMedia;
@@ -544,13 +609,20 @@ app.whenReady().then(async () => {
   registerMediaProtocol();
   registerIpc();
   await createMainWindow();
+  initializeAutoUpdates({
+    getMainWindow: () => mainWindow,
+    beforeInstall: destroyWallpaperWindow,
+  });
 
   app.on("activate", () => {
     if (!mainWindow) createMainWindow().catch((error) => console.error(error));
   });
 });
 
-app.on("before-quit", destroyWallpaperWindow);
+app.on("before-quit", () => {
+  stopAutoUpdates();
+  destroyWallpaperWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
