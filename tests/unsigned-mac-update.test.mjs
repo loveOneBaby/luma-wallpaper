@@ -2,20 +2,46 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { URL } from "node:url";
 import {
   acknowledgeUnsignedMacUpdateLaunch,
   recoverAbandonedUnsignedMacUpdate,
+  removeUnsignedMacUpdateTree,
   selectUnsignedMacUpdateFile,
   shouldExitForActiveUnsignedMacUpdate,
   UNSIGNED_MAC_UPDATE_DIRECTORY,
+  validateUnsignedMacBundleSymlinks,
   validateUnsignedMacZipEntries,
   verifyUnsignedMacUpdateArchive,
 } from "../electron/unsigned-mac-update.mjs";
+
+async function runInElectron(source) {
+  const electronBinary = (await import("electron")).default;
+  return new Promise((resolve, reject) => {
+    const child = spawn(electronBinary, ["-e", source], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.once("error", reject);
+    child.once("close", (exitCode, signal) => {
+      if (exitCode === 0) resolve({ stdout, stderr });
+      else reject(new Error(`Electron helper failed (${signal ?? exitCode}): ${stderr || stdout}`));
+    });
+  });
+}
 
 function manifestFor(contents = Buffer.from("luma update")) {
   const fileName = "Luma-9.8.7-arm64-mac.zip";
@@ -50,10 +76,7 @@ test("selectUnsignedMacUpdateFile rejects ambiguous or malformed integrity metad
     () =>
       selectUnsignedMacUpdateFile({
         ...updateInfo,
-        files: [
-          ...updateInfo.files,
-          { ...updateInfo.files[0], url: "another.zip" },
-        ],
+        files: [...updateInfo.files, { ...updateInfo.files[0], url: "another.zip" }],
       }),
     /只能包含一个 ZIP/,
   );
@@ -98,6 +121,46 @@ test("validateUnsignedMacZipEntries accepts only one contained Luma.app tree", (
   }
 });
 
+test("bundle symlink validation rejects links that leave the physical app tree", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "luma-symlink-test-"));
+  const bundlePath = path.join(root, "Luma.app");
+  const contentsPath = path.join(bundlePath, "Contents");
+  const outsidePath = path.join(root, "outside.txt");
+  try {
+    await mkdir(contentsPath, { recursive: true });
+    await writeFile(outsidePath, "outside");
+    await symlink(outsidePath, path.join(contentsPath, "escaped-link"));
+    await assert.rejects(validateUnsignedMacBundleSymlinks(bundlePath), /应用外部的符号链接/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Electron treats app.asar as an opaque file during validation and cleanup", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "luma-electron-asar-test-"));
+  const bundlePath = path.join(root, "Luma.app");
+  const resourcesPath = path.join(bundlePath, "Contents", "Resources");
+  const moduleUrl = new URL("../electron/unsigned-mac-update.mjs", import.meta.url).href;
+  try {
+    await mkdir(resourcesPath, { recursive: true });
+    await writeFile(path.join(resourcesPath, "app.asar"), "physical asar fixture");
+    const source = `
+      (async () => {
+        const updater = await import(${JSON.stringify(moduleUrl)});
+        await updater.validateUnsignedMacBundleSymlinks(${JSON.stringify(bundlePath)});
+        await updater.removeUnsignedMacUpdateTree(${JSON.stringify(root)});
+      })().catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+      });
+    `;
+    await runInElectron(source);
+    await assert.rejects(access(root), /ENOENT/);
+  } finally {
+    await removeUnsignedMacUpdateTree(root);
+  }
+});
+
 test("verifyUnsignedMacUpdateArchive checks file name, size, and SHA-512", async () => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "luma-update-test-"));
   try {
@@ -139,13 +202,7 @@ test(
     try {
       assert.equal(
         await acknowledgeUnsignedMacUpdateLaunch({
-          argv: [
-            "Luma",
-            "--luma-update-health-marker",
-            markerPath,
-            "--luma-update-token",
-            token,
-          ],
+          argv: ["Luma", "--luma-update-health-marker", markerPath, "--luma-update-token", token],
           userDataPath,
           currentVersion: "9.8.7",
           currentAppPath,

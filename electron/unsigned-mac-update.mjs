@@ -1,7 +1,19 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import {
+import * as nodeFs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import { execFile } from "node:child_process";
+
+const require = createRequire(import.meta.url);
+// Electron patches node:fs so an app.asar file looks like a virtual directory.
+// Update archives and app bundles are physical files, so every updater file
+// operation must bypass that virtual filesystem (including recursive cleanup).
+const physicalFs = process.versions.electron ? require("original-fs") : nodeFs;
+const { createReadStream } = physicalFs;
+const {
   access,
   chmod,
   lstat,
@@ -15,19 +27,12 @@ import {
   rename,
   rm,
   stat,
-} from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
-import { execFile } from "node:child_process";
+} = physicalFs.promises;
 
 const execFileAsync = promisify(execFile);
 
 export const UNSIGNED_MAC_UPDATE_DIRECTORY = "unsigned-mac-update";
-export const UNSIGNED_MAC_HELPER_RELATIVE_PATH = path.join(
-  "native",
-  "luma-mac-update-helper",
-);
+export const UNSIGNED_MAC_HELPER_RELATIVE_PATH = path.join("native", "luma-mac-update-helper");
 
 const APP_BUNDLE_NAME = "Luma.app";
 const BUNDLE_IDENTIFIER = "com.luma.wallpaper";
@@ -170,7 +175,7 @@ async function validateArchiveEntryPaths(archivePath) {
   return validateUnsignedMacZipEntries(stdout.replace(/\r\n?/g, "\n").split("\n").filter(Boolean));
 }
 
-async function validateBundleSymlinks(bundlePath) {
+export async function validateUnsignedMacBundleSymlinks(bundlePath) {
   // macOS commonly exposes /var as a symlink to /private/var. Compare every
   // link against the canonical bundle root or valid framework links look like
   // they escape when staging lives in the system temp directory.
@@ -193,6 +198,10 @@ async function validateBundleSymlinks(bundlePath) {
       }
     }
   }
+}
+
+export async function removeUnsignedMacUpdateTree(treePath) {
+  await rm(treePath, { recursive: true, force: true });
 }
 
 export function selectUnsignedMacUpdateFile(updateInfo) {
@@ -221,7 +230,9 @@ export function selectUnsignedMacUpdateFile(updateInfo) {
 
   const zipEntries = updateInfo.files.filter((file) => {
     try {
-      return path.extname(normalizeFlatAssetName(file?.url, "更新文件 URL")).toLowerCase() === ".zip";
+      return (
+        path.extname(normalizeFlatAssetName(file?.url, "更新文件 URL")).toLowerCase() === ".zip"
+      );
     } catch {
       return false;
     }
@@ -256,9 +267,10 @@ export async function validateUnsignedMacAppBundle(
 ) {
   const resolvedBundlePath = path.resolve(bundlePath);
   const bundleStat = await lstat(resolvedBundlePath);
-  if (!bundleStat.isDirectory() || bundleStat.isSymbolicLink()) throw new Error("更新包中的应用无效");
+  if (!bundleStat.isDirectory() || bundleStat.isSymbolicLink())
+    throw new Error("更新包中的应用无效");
 
-  await validateBundleSymlinks(resolvedBundlePath);
+  await validateUnsignedMacBundleSymlinks(resolvedBundlePath);
   const infoPlistPath = path.join(resolvedBundlePath, "Contents", "Info.plist");
   const [identifier, shortVersion, bundleVersion, executableName] = await Promise.all([
     readPlistValue(infoPlistPath, "CFBundleIdentifier"),
@@ -267,12 +279,14 @@ export async function validateUnsignedMacAppBundle(
     readPlistValue(infoPlistPath, "CFBundleExecutable"),
   ]);
   if (identifier !== expectedBundleIdentifier) throw new Error("更新应用的 Bundle ID 不匹配");
-  if (shortVersion !== version || bundleVersion !== version) throw new Error("更新应用版本与清单不匹配");
+  if (shortVersion !== version || bundleVersion !== version)
+    throw new Error("更新应用版本与清单不匹配");
   if (executableName !== EXECUTABLE_NAME) throw new Error("更新应用的主程序名称不正确");
 
   const executablePath = path.join(resolvedBundlePath, "Contents", "MacOS", executableName);
   const executableStat = await lstat(executablePath);
-  if (!executableStat.isFile() || executableStat.isSymbolicLink()) throw new Error("更新应用主程序无效");
+  if (!executableStat.isFile() || executableStat.isSymbolicLink())
+    throw new Error("更新应用主程序无效");
   await access(executablePath, 1);
 
   const expectedArchitecture = architecture === "x64" ? "x86_64" : architecture;
@@ -281,7 +295,8 @@ export async function validateUnsignedMacAppBundle(
   }
   const { stdout: architectureOutput } = await run("/usr/bin/lipo", ["-archs", executablePath]);
   const architectures = architectureOutput.trim().split(/\s+/);
-  if (!architectures.includes(expectedArchitecture)) throw new Error("更新应用架构与当前版本不匹配");
+  if (!architectures.includes(expectedArchitecture))
+    throw new Error("更新应用架构与当前版本不匹配");
 
   await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", resolvedBundlePath]);
   return { bundlePath: resolvedBundlePath, executablePath, version, architecture };
@@ -344,7 +359,8 @@ export async function prepareUnsignedMacUpdate({
   const metadata = selectUnsignedMacUpdateFile(updateInfo);
   const archivePath = await verifyUnsignedMacUpdateArchive(downloadedFile, metadata);
   const targetAppPath = path.resolve(assertNonEmptyString(currentAppPath, "当前应用路径"));
-  if (path.basename(targetAppPath) !== APP_BUNDLE_NAME) throw new Error("当前应用不是预期的 Luma.app");
+  if (path.basename(targetAppPath) !== APP_BUNDLE_NAME)
+    throw new Error("当前应用不是预期的 Luma.app");
   if (targetAppPath.includes("/AppTranslocation/") || targetAppPath.startsWith("/Volumes/")) {
     throw new Error("请先将 Luma 移到“应用程序”文件夹，再安装更新");
   }
@@ -380,7 +396,9 @@ export async function prepareUnsignedMacUpdate({
     await mkdir(path.dirname(logPath), { recursive: true, mode: 0o700 });
     await validateArchiveEntryPaths(archivePath);
     await run("/usr/bin/ditto", ["-x", "-k", archivePath, extractionDirectory]);
-    const topLevelEntries = (await readdir(extractionDirectory)).filter((name) => name !== ".DS_Store");
+    const topLevelEntries = (await readdir(extractionDirectory)).filter(
+      (name) => name !== ".DS_Store",
+    );
     if (topLevelEntries.length !== 1 || topLevelEntries[0] !== APP_BUNDLE_NAME) {
       throw new Error("更新 ZIP 必须只包含 Luma.app");
     }
@@ -425,11 +443,11 @@ export async function prepareUnsignedMacUpdate({
       expectedVersion: metadata.version,
     };
     await writeJsonAtomically(pendingPlanPath, plan);
-    await rm(stagingRoot, { recursive: true, force: true });
+    await removeUnsignedMacUpdateTree(stagingRoot);
     return { helperPath, planPath: pendingPlanPath, plan };
   } catch (error) {
-    await rm(candidateAppPath, { recursive: true, force: true }).catch(() => {});
-    if (stagingRoot) await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    await removeUnsignedMacUpdateTree(candidateAppPath).catch(() => {});
+    if (stagingRoot) await removeUnsignedMacUpdateTree(stagingRoot).catch(() => {});
     await rm(pendingPlanPath, { force: true }).catch(() => {});
     throw error;
   }
@@ -477,7 +495,7 @@ export async function launchUnsignedMacUpdate({ helperPath, planPath }) {
     throw new Error("macOS 更新辅助程序未能启动");
   } catch (error) {
     child.kill("SIGTERM");
-    await rm(plan.candidateApp, { recursive: true, force: true }).catch(() => {});
+    await removeUnsignedMacUpdateTree(plan.candidateApp).catch(() => {});
     await rm(plan.healthMarker, { force: true }).catch(() => {});
     await rm(plan.journalFile, { force: true }).catch(() => {});
     await rm(planPath, { force: true }).catch(() => {});
@@ -493,8 +511,7 @@ function readArgument(argv, name) {
 
 function hasUpdateLaunchArguments(argv) {
   return Boolean(
-    readArgument(argv, "--luma-update-token") &&
-      readArgument(argv, "--luma-update-health-marker"),
+    readArgument(argv, "--luma-update-token") && readArgument(argv, "--luma-update-health-marker"),
   );
 }
 
@@ -524,10 +541,7 @@ async function unsignedMacHelperIsRunning(planPath) {
   });
 }
 
-export async function shouldExitForActiveUnsignedMacUpdate({
-  argv = process.argv,
-  userDataPath,
-}) {
+export async function shouldExitForActiveUnsignedMacUpdate({ argv = process.argv, userDataPath }) {
   if (process.platform !== "darwin" || hasUpdateLaunchArguments(argv)) return false;
   const pending = await readPendingPlan(userDataPath);
   const recoveryToken = readArgument(argv, "--luma-update-recovery-token");
@@ -550,23 +564,21 @@ export async function recoverAbandonedUnsignedMacUpdate({
   const currentPath = path.resolve(currentAppPath);
   const canonicalToken =
     typeof plan?.token === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      plan.token,
-    );
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(plan.token);
   const expectedCandidateName = canonicalToken ? `.Luma-update-${plan.token}.app` : null;
   const candidateIsSafe = Boolean(
     plan?.schemaVersion === 1 &&
-      expectedCandidateName &&
-      typeof plan.currentApp === "string" &&
-      samePath(plan.currentApp, currentPath) &&
-      typeof plan.candidateApp === "string" &&
-      path.basename(plan.candidateApp) === expectedCandidateName &&
-      path.dirname(path.resolve(plan.candidateApp)) === path.dirname(currentPath) &&
-      !samePath(plan.candidateApp, currentPath),
+    expectedCandidateName &&
+    typeof plan.currentApp === "string" &&
+    samePath(plan.currentApp, currentPath) &&
+    typeof plan.candidateApp === "string" &&
+    path.basename(plan.candidateApp) === expectedCandidateName &&
+    path.dirname(path.resolve(plan.candidateApp)) === path.dirname(currentPath) &&
+    !samePath(plan.candidateApp, currentPath),
   );
 
   if (candidateIsSafe) {
-    await rm(plan.candidateApp, { recursive: true, force: true }).catch((error) =>
+    await removeUnsignedMacUpdateTree(plan.candidateApp).catch((error) =>
       logger.warn?.("Unable to remove an abandoned update candidate", error),
     );
   }
