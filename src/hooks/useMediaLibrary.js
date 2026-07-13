@@ -156,7 +156,7 @@ function persistenceFailureMessage(reason) {
 }
 
 /** Owns the uploaded media library, persistence, selection and ingestion. */
-export function useMediaLibrary({ showFeedback, showUploadResult }) {
+export function useMediaLibrary({ showFeedback, showUploadResult, onStopIfApplied }) {
   const [items, setItems] = useState(() => DEMO_ITEMS.map((item) => ({ ...item })));
   const [selectedId, setSelectedId] = useState(DEMO_ITEMS[0].id);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -175,6 +175,8 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
   const importQueueRef = useRef(Promise.resolve());
   const validationAbortRef = useRef(new AbortController());
   const persistenceTimerRef = useRef(null);
+  const undoTimerRef = useRef(null);
+  const pendingRemovalRef = useRef(null);
   const persistenceSnapshotRef = useRef(null);
   const persistenceSequenceRef = useRef(0);
   const persistenceItemsRef = useRef(items);
@@ -601,20 +603,8 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     [commitItems, ensureHydrated],
   );
 
-  const removeMedia = useCallback(
-    (id) => {
-      if (!ensureHydrated()) return;
-      const previous = itemsRef.current;
-      const index = previous.findIndex((item) => item.id === id);
-      const item = previous[index];
-      if (!item || item.isDemo) return;
-
-      const remaining = previous.filter((entry) => entry.id !== id);
-      sourceKeysRef.current.delete(item.sourceKey);
-      commitItems(remaining);
-      if (selectedId === id) {
-        setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id ?? DEMO_ITEMS[0].id);
-      }
+  const finalizeRemoval = useCallback(
+    (item) => {
       if (item.objectUrl) {
         objectUrlsRef.current.delete(item.src);
         window.setTimeout(() => URL.revokeObjectURL(item.src), 0);
@@ -623,10 +613,69 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
           void releaseDesktopMedia([item.filePath]);
         }, 0);
       }
-      showFeedback("success", `已移除 ${item.name}`, { source: "library" });
+      onStopIfApplied?.(item);
     },
-    [commitItems, ensureHydrated, selectedId, showFeedback],
+    [onStopIfApplied],
   );
+
+  const removeMedia = useCallback(
+    (id) => {
+      if (!ensureHydrated()) return;
+      const previous = itemsRef.current;
+      const index = previous.findIndex((item) => item.id === id);
+      const item = previous[index];
+      if (!item || item.isDemo) return;
+
+      // If a prior delete is still in its undo window, finalize it now.
+      if (undoTimerRef.current) {
+        window.clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = null;
+        const prior = pendingRemovalRef.current;
+        pendingRemovalRef.current = null;
+        if (prior) finalizeRemoval(prior.item);
+      }
+
+      const remaining = previous.filter((entry) => entry.id !== id);
+      sourceKeysRef.current.delete(item.sourceKey);
+      commitItems(remaining);
+      if (selectedId === id) {
+        setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id ?? DEMO_ITEMS[0].id);
+      }
+
+      // Soft-delete: keep a snapshot for ~5s so the user can undo; the
+      // toast carries an undo button and auto-dismisses at the same time.
+      pendingRemovalRef.current = { item, index };
+      showFeedback("success", `已移除 ${item.name}`, {
+        source: "library",
+        duration: 5000,
+        undoRemove: true,
+      });
+      undoTimerRef.current = window.setTimeout(() => {
+        undoTimerRef.current = null;
+        const pending = pendingRemovalRef.current;
+        pendingRemovalRef.current = null;
+        if (pending) finalizeRemoval(pending.item);
+      }, 5000);
+    },
+    [commitItems, ensureHydrated, finalizeRemoval, selectedId, showFeedback],
+  );
+
+  const undoRemove = useCallback(() => {
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    const pending = pendingRemovalRef.current;
+    pendingRemovalRef.current = null;
+    if (!pending) return;
+    const { item, index } = pending;
+    const nextItems = [...itemsRef.current];
+    nextItems.splice(Math.min(index, nextItems.length), 0, item);
+    sourceKeysRef.current.add(item.sourceKey);
+    commitItems(nextItems);
+    setSelectedId(item.id);
+    showFeedback("info", `已恢复 ${item.name}`, { source: "library" });
+  }, [commitItems, showFeedback]);
 
   const relocateMedia = useCallback(
     async (id) => {
@@ -735,6 +784,7 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     openFilePicker,
     toggleFavorite,
     removeMedia,
+    undoRemove,
     relocateMedia,
     handleDrop,
     handleDragEnter,

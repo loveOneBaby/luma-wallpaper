@@ -47,6 +47,19 @@ export function App() {
     handleCheckForUpdates,
   } = useWallpaperStatus();
 
+  const stopIfApplied = useCallback(
+    (item) => {
+      if (
+        appliedMatchKey
+        && item
+        && ((item.demoKey ? `demo:${item.demoKey}` : item.filePath) === appliedMatchKey)
+      ) {
+        handleStopWallpaper();
+      }
+    },
+    [appliedMatchKey, handleStopWallpaper],
+  );
+
   const {
     items,
     media,
@@ -64,11 +77,12 @@ export function App() {
     toggleFavorite,
     removeMedia,
     relocateMedia,
+    undoRemove,
     handleDrop,
     handleDragEnter,
     handleDragOver,
     handleDragLeave,
-  } = useMediaLibrary({ showFeedback, showUploadResult });
+  } = useMediaLibrary({ showFeedback, showUploadResult, onStopIfApplied: stopIfApplied });
 
   const {
     isPlaying,
@@ -208,6 +222,7 @@ export function App() {
         onDismissUpdate={dismissUpdate}
         onRetryUpdate={handleRetryUpdate}
         onCheckForUpdates={handleCheckForUpdates}
+        onUndoRemove={undoRemove}
         inert={isFullscreen || isConflictOpen}
       />
 
