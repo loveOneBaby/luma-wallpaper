@@ -41,6 +41,10 @@ export function App() {
     handleResumeWallpaper,
     handleInstallUpdate,
     dismissUpdate,
+    pendingUpdate,
+    reopenUpdate,
+    handleRetryUpdate,
+    handleCheckForUpdates,
   } = useWallpaperStatus();
 
   const {
@@ -169,6 +173,8 @@ export function App() {
         onToggleLibrary={() => setLibraryOpen((value) => !value)}
         onUpload={openFilePicker}
         platformLabel={getPlatformLabel(platform)}
+        pendingUpdate={pendingUpdate}
+        onReopenUpdate={reopenUpdate}
         isLibraryReady={isHydrated}
         inert={isFullscreen || isConflictOpen}
       />
@@ -199,6 +205,8 @@ export function App() {
         onResumeWallpaper={handleResumeWallpaper}
         onInstallUpdate={handleInstallUpdate}
         onDismissUpdate={dismissUpdate}
+        onRetryUpdate={handleRetryUpdate}
+        onCheckForUpdates={handleCheckForUpdates}
         inert={isFullscreen || isConflictOpen}
       />
 

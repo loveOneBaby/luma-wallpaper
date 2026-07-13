@@ -33,3 +33,11 @@ export async function downloadAndInstallDesktopUpdate() {
   }
   return bridge.downloadAndInstallUpdate();
 }
+
+export async function checkForUpdatesDesktop() {
+  const bridge = getBridge();
+  if (!bridge?.checkForUpdates) {
+    return { ok: false, message: "当前环境不支持检查更新" };
+  }
+  return bridge.checkForUpdates();
+}

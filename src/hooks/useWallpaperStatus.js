@@ -8,6 +8,7 @@ import {
   subscribeWallpaperRuntimeState,
 } from "../services/desktopWallpaper.js";
 import {
+  checkForUpdatesDesktop,
   downloadAndInstallDesktopUpdate,
   getDesktopUpdateState,
   subscribeDesktopUpdates,
@@ -34,6 +35,7 @@ export function useWallpaperStatus() {
   const [hasWallpaperRecovery, setHasWallpaperRecovery] = useState(false);
   const [wallpaperRuntime, setWallpaperRuntime] = useState({ status: "stopped" });
   const [appliedMatchKey, setAppliedMatchKey] = useState(null);
+  const [pendingUpdate, setPendingUpdate] = useState(null);
   const [isConflictOpen, setConflictOpen] = useState(
     () =>
       import.meta.env.DEV &&
@@ -42,6 +44,8 @@ export function useWallpaperStatus() {
 
   const statusTimerRef = useRef(null);
   const readyUpdateRef = useRef(null);
+  const pendingUpdateRef = useRef(null);
+  const lastNoticeKeyRef = useRef(null);
   const applyInFlightRef = useRef(false);
   const lastApplyRequestRef = useRef(null);
 
@@ -205,12 +209,45 @@ export function useWallpaperStatus() {
     setFeedback(null);
   }, []);
 
+  const reopenUpdate = useCallback(() => {
+    const pending = pendingUpdateRef.current;
+    if (!pending) return;
+    readyUpdateRef.current = pending.state === "ready" ? pending : null;
+    showFeedback("success", pending.message ?? "发现新版本", {
+      source: "update",
+      persistent: true,
+      updateState: pending,
+    });
+  }, [showFeedback]);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    lastNoticeKeyRef.current = null;
+    showFeedback("updating", "正在检查更新…", { source: "update", persistent: true });
+    try {
+      await checkForUpdatesDesktop();
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : "检查更新失败", {
+        source: "update",
+      });
+    }
+  }, [showFeedback]);
+
+  const handleRetryUpdate = useCallback(async () => {
+    const pending = pendingUpdateRef.current;
+    if (pending?.state === "available" || pending?.state === "ready") {
+      return handleInstallUpdate();
+    }
+    return handleCheckForUpdates();
+  }, [handleInstallUpdate, handleCheckForUpdates]);
+
   useEffect(() => {
     let active = true;
-    let lastNoticeKey = null;
+    lastNoticeKeyRef.current = null;
     const handleUpdateState = (state) => {
       if (!active || !state?.state) return;
       if (state.state === "available") {
+        pendingUpdateRef.current = state;
+        setPendingUpdate(state);
         showFeedback("success", state.message ?? "发现新版本", {
           source: "update",
           persistent: true,
@@ -224,6 +261,8 @@ export function useWallpaperStatus() {
         });
       } else if (state.state === "ready") {
         readyUpdateRef.current = state;
+        pendingUpdateRef.current = state;
+        setPendingUpdate(state);
         showFeedback("success", state.message ?? "新版本已准备好", {
           source: "update",
           persistent: true,
@@ -239,28 +278,31 @@ export function useWallpaperStatus() {
       } else if (state.state === "unsupported") {
         const message = state.message ?? "当前版本暂不支持自动更新，请手动下载安装新版本";
         const noticeKey = `unsupported:${state.reason ?? message}`;
-        if (noticeKey === lastNoticeKey) return;
-        lastNoticeKey = noticeKey;
+        if (noticeKey === lastNoticeKeyRef.current) return;
+        lastNoticeKeyRef.current = noticeKey;
         showFeedback("warning", message, {
           source: "update",
           duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+          updateState: state,
         });
       } else if (state.state === "idle" && state.lastError) {
         const noticeKey = `idle-error:${state.lastError}`;
-        if (noticeKey === lastNoticeKey) return;
-        lastNoticeKey = noticeKey;
+        if (noticeKey === lastNoticeKeyRef.current) return;
+        lastNoticeKeyRef.current = noticeKey;
         showFeedback("error", `更新检查失败：${state.lastError}`, {
           source: "update",
           duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+          updateState: state,
         });
       } else if (state.state === "error" && (state.message || state.lastError)) {
         const message = state.message ?? state.lastError;
         const noticeKey = `error:${message}`;
-        if (noticeKey === lastNoticeKey) return;
-        lastNoticeKey = noticeKey;
+        if (noticeKey === lastNoticeKeyRef.current) return;
+        lastNoticeKeyRef.current = noticeKey;
         showFeedback("error", `更新失败：${message}`, {
           source: "update",
           duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+          updateState: state,
         });
       }
     };
@@ -355,5 +397,9 @@ export function useWallpaperStatus() {
     handleResumeWallpaper,
     handleInstallUpdate,
     dismissUpdate,
+    pendingUpdate,
+    reopenUpdate,
+    handleRetryUpdate,
+    handleCheckForUpdates,
   };
 }

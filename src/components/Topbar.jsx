@@ -1,4 +1,4 @@
-import { CloudArrowUpIcon, SquaresFourIcon } from "@phosphor-icons/react";
+import { ArrowCircleUpIcon, CloudArrowUpIcon, SquaresFourIcon } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_LIBRARY_BUTTON, GLASS_UPLOAD_BUTTON } from "./glassPresets.js";
 
@@ -7,6 +7,8 @@ export function Topbar({
   onToggleLibrary,
   onUpload,
   platformLabel,
+  pendingUpdate = null,
+  onReopenUpdate,
   isLibraryReady = true,
   inert = false,
 }) {
@@ -14,6 +16,19 @@ export function Topbar({
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
       <div className="brand">Luma</div>
       <div className="topbar-actions">
+        {pendingUpdate ? (
+          <GlassSurface
+            {...GLASS_LIBRARY_BUTTON}
+            as="button"
+            className="update-pill liquid-glass"
+            type="button"
+            onClick={onReopenUpdate}
+            aria-label={`新版本${pendingUpdate.version ? ` v${pendingUpdate.version}` : ""} 可用`}
+          >
+            <ArrowCircleUpIcon size={18} weight="regular" aria-hidden="true" />
+            <span>新版本{pendingUpdate.version ? ` v${pendingUpdate.version}` : ""}</span>
+          </GlassSurface>
+        ) : null}
         <GlassSurface
           {...GLASS_LIBRARY_BUTTON}
           as="button"

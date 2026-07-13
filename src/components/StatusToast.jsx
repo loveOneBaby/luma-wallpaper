@@ -19,6 +19,8 @@ export function StatusToast({
   onResumeWallpaper,
   onInstallUpdate,
   onDismissUpdate,
+  onRetryUpdate,
+  onCheckForUpdates,
   inert = false,
 }) {
   const isDesktop = platform === "darwin" || platform === "win32";
@@ -105,6 +107,10 @@ export function StatusToast({
   const showUpdateActions =
     feedback.source === "update"
     && (feedback.updateState?.state === "available" || feedback.updateState?.state === "ready");
+  const showUpdateErrorActions =
+    feedback.source === "update"
+    && Boolean(feedback.updateState)
+    && (feedback.tone === "error" || feedback.tone === "warning");
 
   return (
     <GlassSurface
@@ -139,6 +145,16 @@ export function StatusToast({
             aria-label="稍后更新"
           >
             <XIcon size={15} weight="bold" aria-hidden="true" />
+          </button>
+        </>
+      ) : null}
+      {showUpdateErrorActions ? (
+        <>
+          <button className="status-action status-update" type="button" onClick={onRetryUpdate}>
+            重试
+          </button>
+          <button className="status-action" type="button" onClick={onCheckForUpdates}>
+            手动检查
           </button>
         </>
       ) : null}

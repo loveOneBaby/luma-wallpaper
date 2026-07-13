@@ -1743,6 +1743,25 @@ button:focus-visible,
   cursor: default;
 }
 
+/* P0-2: update pill in topbar */
+
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #04303a;
+  cursor: pointer;
+}
+
+.update-pill:hover {
+  filter: brightness(1.05);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
