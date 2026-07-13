@@ -13,6 +13,25 @@ function supportsSvgBackdropFilter(filterId) {
   return probe.style.backdropFilter !== "";
 }
 
+function getGlassPreferences() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return { simplified: false, reducedTransparency: false };
+  }
+
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const reducedTransparency =
+    window.matchMedia?.("(prefers-reduced-transparency: reduce)").matches ?? false;
+  const lowCpu =
+    Number.isFinite(navigator.hardwareConcurrency) && navigator.hardwareConcurrency <= 4;
+  const lowMemory = Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory <= 4;
+  const saveData = navigator.connection?.saveData === true;
+
+  return {
+    simplified: reducedMotion || reducedTransparency || lowCpu || lowMemory || saveData,
+    reducedTransparency,
+  };
+}
+
 export function GlassSurface({
   as: Component = "div",
   children,
@@ -43,6 +62,7 @@ export function GlassSurface({
   const blueGradId = `blue-grad-${uniqueId}`;
 
   const [svgSupported, setSvgSupported] = useState(false);
+  const [glassPreferences, setGlassPreferences] = useState(getGlassPreferences);
   const containerRef = useRef(null);
   const feImageRef = useRef(null);
   const redChannelRef = useRef(null);
@@ -50,13 +70,33 @@ export function GlassSurface({
   const blueChannelRef = useRef(null);
   const gaussianBlurRef = useRef(null);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const mediaQueries = [
+      window.matchMedia?.("(prefers-reduced-motion: reduce)"),
+      window.matchMedia?.("(prefers-reduced-transparency: reduce)"),
+    ].filter(Boolean);
+    const connection = navigator.connection;
+    const updatePreferences = () => setGlassPreferences(getGlassPreferences());
+
+    mediaQueries.forEach((query) => query.addEventListener?.("change", updatePreferences));
+    connection?.addEventListener?.("change", updatePreferences);
+
+    return () => {
+      mediaQueries.forEach((query) => query.removeEventListener?.("change", updatePreferences));
+      connection?.removeEventListener?.("change", updatePreferences);
+    };
+  }, []);
+
   const generateDisplacementMap = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect();
     const actualWidth = Math.max(rect?.width || 400, 1);
     const actualHeight = Math.max(rect?.height || 200, 1);
-    const actualRadius = borderRadius == null
-      ? Number.parseFloat(getComputedStyle(containerRef.current).borderTopLeftRadius) || 0
-      : borderRadius;
+    const actualRadius =
+      borderRadius == null
+        ? Number.parseFloat(getComputedStyle(containerRef.current).borderTopLeftRadius) || 0
+        : borderRadius;
     const edgeSize = Math.min(actualWidth, actualHeight) * (borderWidth * 0.5);
 
     const svgContent = `
@@ -86,6 +126,8 @@ export function GlassSurface({
   }, [generateDisplacementMap]);
 
   useEffect(() => {
+    if (glassPreferences.simplified || !svgSupported) return;
+
     updateDisplacementMap();
     [
       { ref: redChannelRef, offset: redOffset },
@@ -102,14 +144,23 @@ export function GlassSurface({
     displace,
     distortionScale,
     greenOffset,
+    glassPreferences.simplified,
     redOffset,
+    svgSupported,
     updateDisplacementMap,
     xChannel,
     yChannel,
   ]);
 
   useEffect(() => {
-    if (!containerRef.current || typeof ResizeObserver === "undefined") return undefined;
+    if (
+      glassPreferences.simplified ||
+      !svgSupported ||
+      !containerRef.current ||
+      typeof ResizeObserver === "undefined"
+    ) {
+      return undefined;
+    }
 
     let frameId = 0;
     const resizeObserver = new ResizeObserver(() => {
@@ -122,11 +173,11 @@ export function GlassSurface({
       cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
     };
-  }, [updateDisplacementMap]);
+  }, [glassPreferences.simplified, svgSupported, updateDisplacementMap]);
 
   useEffect(() => {
-    setSvgSupported(supportsSvgBackdropFilter(filterId));
-  }, [filterId]);
+    setSvgSupported(!glassPreferences.simplified && supportsSvgBackdropFilter(filterId));
+  }, [filterId, glassPreferences.simplified]);
 
   const containerStyle = {
     ...style,
@@ -138,45 +189,86 @@ export function GlassSurface({
     "--filter-id": `url(#${filterId})`,
   };
   const ContentElement = Component === "button" || Component === "a" ? "span" : "div";
+  const glassModeClass = svgSupported ? "glass-surface--svg" : "glass-surface--fallback";
+  const preferenceClasses = [
+    glassPreferences.simplified ? "glass-surface--simplified" : "",
+    glassPreferences.reducedTransparency ? "glass-surface--reduced-transparency" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <Component
       ref={containerRef}
-      className={`glass-surface ${svgSupported ? "glass-surface--svg" : "glass-surface--fallback"} ${className}`.trim()}
+      className={`glass-surface ${glassModeClass} ${preferenceClasses} ${className}`.trim()}
       style={containerStyle}
       {...rest}
     >
-      <svg className="glass-surface__filter" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <filter id={filterId} colorInterpolationFilters="sRGB" x="0%" y="0%" width="100%" height="100%">
-            <feImage ref={feImageRef} width="100%" height="100%" preserveAspectRatio="none" result="map" />
-            <feDisplacementMap ref={redChannelRef} in="SourceGraphic" in2="map" result="dispRed" />
-            <feColorMatrix
-              in="dispRed"
-              type="matrix"
-              values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-              result="red"
-            />
-            <feDisplacementMap ref={greenChannelRef} in="SourceGraphic" in2="map" result="dispGreen" />
-            <feColorMatrix
-              in="dispGreen"
-              type="matrix"
-              values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
-              result="green"
-            />
-            <feDisplacementMap ref={blueChannelRef} in="SourceGraphic" in2="map" result="dispBlue" />
-            <feColorMatrix
-              in="dispBlue"
-              type="matrix"
-              values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
-              result="blue"
-            />
-            <feBlend in="red" in2="green" mode="screen" result="rg" />
-            <feBlend in="rg" in2="blue" mode="screen" result="output" />
-            <feGaussianBlur ref={gaussianBlurRef} in="output" stdDeviation="0.7" />
-          </filter>
-        </defs>
-      </svg>
+      {svgSupported && !glassPreferences.simplified ? (
+        <svg
+          className="glass-surface__filter"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <defs>
+            <filter
+              id={filterId}
+              colorInterpolationFilters="sRGB"
+              x="0%"
+              y="0%"
+              width="100%"
+              height="100%"
+            >
+              <feImage
+                ref={feImageRef}
+                width="100%"
+                height="100%"
+                preserveAspectRatio="none"
+                result="map"
+              />
+              <feDisplacementMap
+                ref={redChannelRef}
+                in="SourceGraphic"
+                in2="map"
+                result="dispRed"
+              />
+              <feColorMatrix
+                in="dispRed"
+                type="matrix"
+                values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                result="red"
+              />
+              <feDisplacementMap
+                ref={greenChannelRef}
+                in="SourceGraphic"
+                in2="map"
+                result="dispGreen"
+              />
+              <feColorMatrix
+                in="dispGreen"
+                type="matrix"
+                values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                result="green"
+              />
+              <feDisplacementMap
+                ref={blueChannelRef}
+                in="SourceGraphic"
+                in2="map"
+                result="dispBlue"
+              />
+              <feColorMatrix
+                in="dispBlue"
+                type="matrix"
+                values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+                result="blue"
+              />
+              <feBlend in="red" in2="green" mode="screen" result="rg" />
+              <feBlend in="rg" in2="blue" mode="screen" result="output" />
+              <feGaussianBlur ref={gaussianBlurRef} in="output" stdDeviation="0.7" />
+            </filter>
+          </defs>
+        </svg>
+      ) : null}
 
       <ContentElement className="glass-surface__content">{children}</ContentElement>
     </Component>

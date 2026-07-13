@@ -3,6 +3,7 @@ const status = document.querySelector("#wallpaper-status");
 
 let currentUrl = "";
 let currentMedia = null;
+let powerSuspended = false;
 
 function showStatus(message = "") {
   status.textContent = message;
@@ -33,6 +34,12 @@ async function applyMedia(media) {
     video.load();
   }
 
+  if (powerSuspended) {
+    video.pause();
+    showStatus();
+    return;
+  }
+
   try {
     await video.play();
     showStatus();
@@ -55,11 +62,30 @@ video.addEventListener("playing", () => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && currentUrl) video.play().catch(() => {});
+  if (!document.hidden && currentUrl && !powerSuspended) video.play().catch(() => {});
 });
 
+function handlePlaybackControl(control) {
+  if (control?.action === "pause") {
+    powerSuspended = true;
+    video.pause();
+    return;
+  }
+  if (control?.action !== "resume") return;
+  powerSuspended = false;
+  if (currentUrl) video.play().catch(() => showStatus("动态壁纸播放已暂停"));
+}
+
 const unsubscribe = window.lumaWallpaper.onMediaChanged(applyMedia);
-window.addEventListener("beforeunload", unsubscribe, { once: true });
+const unsubscribePlaybackControl = window.lumaWallpaper.onPlaybackControl(handlePlaybackControl);
+window.addEventListener(
+  "beforeunload",
+  () => {
+    unsubscribe();
+    unsubscribePlaybackControl();
+  },
+  { once: true },
+);
 
 window.lumaWallpaper
   .getMedia()

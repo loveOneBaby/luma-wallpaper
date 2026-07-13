@@ -14,5 +14,11 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("luma:wallpaper:media-changed", listener);
       return () => ipcRenderer.removeListener("luma:wallpaper:media-changed", listener);
     },
+    onPlaybackControl: (callback) => {
+      if (typeof callback !== "function") return () => {};
+      const listener = (_event, control) => callback(control);
+      ipcRenderer.on("luma:wallpaper:playback-control", listener);
+      return () => ipcRenderer.removeListener("luma:wallpaper:playback-control", listener);
+    },
   }),
 );

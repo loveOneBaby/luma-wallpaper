@@ -12,9 +12,9 @@ import { useWallpaperStatus } from "./hooks/useWallpaperStatus.js";
 import { getDesktopPlatform } from "./services/desktopWallpaper.js";
 
 function getPlatformLabel(platform) {
-  if (platform === "darwin") return "macOS 桌面端";
-  if (platform === "win32") return "Windows 桌面端";
-  return "Web · Windows · macOS";
+  if (platform === "darwin") return "macOS 桌面端 · 当前设置主屏幕";
+  if (platform === "win32") return "Windows 桌面端 · 当前设置主屏幕";
+  return "Web 预览模式";
 }
 
 export function App() {
@@ -33,6 +33,7 @@ export function App() {
     showFeedback,
     showUploadResult,
     handleApplyWallpaper,
+    retryLastWallpaper,
     handleInstallUpdate,
     dismissUpdate,
   } = useWallpaperStatus();
@@ -228,7 +229,7 @@ export function App() {
         <ConflictDialog
           applyState={applyState}
           onClose={() => setConflictOpen(false)}
-          onRetry={() => handleApplyWallpaper(media, true)}
+          onRetry={retryLastWallpaper}
         />
       ) : null}
 

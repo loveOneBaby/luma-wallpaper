@@ -160,7 +160,7 @@ jobs:
           else
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID
             export CSC_IDENTITY_AUTO_DISCOVERY=false
-            echo "::warning title=Unsigned macOS artifact::This build is not signed and cannot auto-update on macOS. Configure the Apple Developer ID secrets (MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_TEAM_ID) to enable signed, notarized releases."
+            echo "::warning title=Unsigned macOS artifact::This build may attempt self-distributed updates, but it has no Developer ID integrity verification. Configure the Apple Developer ID secrets (MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER, APPLE_TEAM_ID) for signed, notarized releases."
           fi
 
           npx --no-install electron-builder "${BUILD_ARGS[@]}"

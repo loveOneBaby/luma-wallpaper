@@ -38,6 +38,15 @@ export function ControlDock({
   const isApplying = applyState === "applying";
   const isVideo = mediaKind === "video";
   const isDesktop = platform === "darwin" || platform === "win32";
+  const isApplyUnavailable = isApplying || !isDesktop;
+
+  const handleApply = (event) => {
+    if (isApplyUnavailable) {
+      event.preventDefault();
+      return;
+    }
+    onApply();
+  };
 
   return (
     <GlassSurface
@@ -73,7 +82,6 @@ export function ControlDock({
         max={isVideo ? Math.max(duration, 0.1) : 1}
         step="0.01"
         value={isVideo ? Math.min(currentTime, duration || 0) : 0}
-        onInput={onSeek}
         onChange={onSeek}
         style={{ "--progress": `${progress}%` }}
         aria-label="预览进度"
@@ -116,8 +124,9 @@ export function ControlDock({
       <button
         className={`apply-button ${isApplying ? "is-applying" : ""} ${!isDesktop ? "is-web-only" : ""}`}
         type="button"
-        onClick={onApply}
-        disabled={isApplying || !isDesktop}
+        onClick={handleApply}
+        disabled={isApplying}
+        aria-disabled={isApplyUnavailable}
         aria-label={isDesktop ? "设为壁纸" : "仅 macOS 和 Windows 桌面端可以设置壁纸"}
         title={isDesktop ? undefined : "浏览器可管理和预览；设置壁纸请使用桌面端"}
       >
