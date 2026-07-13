@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import electronUpdater from "electron-updater";
+import { getUpdaterSupport } from "./update-support.mjs";
 
 const { autoUpdater } = electronUpdater;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -33,6 +34,8 @@ let updateState = {
   message: null,
   lastError: null,
   lastCheckedAt: null,
+  signed: null,
+  integrity: null,
 };
 
 function mainWindowCanReceiveUpdates() {
@@ -123,14 +126,6 @@ function createPersistentLogger() {
   };
 }
 
-function updaterSupport() {
-  if (!app.isPackaged) return { supported: false, reason: "development" };
-  if (process.platform !== "darwin" && process.platform !== "win32") {
-    return { supported: false, reason: "platform" };
-  }
-  return { supported: true, reason: null };
-}
-
 async function checkForUpdates({ manual = false } = {}) {
   if (!updateState.supported || updateReady) return { ...updateState };
   if (checkPromise) return checkPromise;
@@ -171,17 +166,28 @@ export function initializeAutoUpdates(options = {}) {
   updateLogger = createPersistentLogger();
   autoUpdater.logger = updateLogger;
 
-  const support = updaterSupport();
+  const support = getUpdaterSupport({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    execPath: process.execPath,
+  });
   publishState({
     state: support.supported ? "idle" : "unsupported",
     supported: support.supported,
     reason: support.reason,
+    signed: support.signed,
+    integrity: support.integrity,
     message: null,
     lastError: null,
     version: null,
     percent: null,
   });
   if (!support.supported) return updateState;
+  if (process.platform === "darwin" && !support.signed) {
+    updateLogger.warn(
+      "macOS package has no valid Developer ID Application signature; automatic update remains enabled by self-distribution policy",
+    );
+  }
 
   autoUpdater.allowPrerelease = false;
   autoUpdater.autoDownload = false;

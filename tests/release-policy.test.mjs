@@ -62,4 +62,6 @@ test("macOS release validates the notarized app bundle instead of an unstapled D
   );
   assert.match(workflow, /xcrun stapler validate "\$APP_PATH"/);
   assert.doesNotMatch(workflow, /xcrun stapler validate "\$dmg"/);
+  assert.match(workflow, /no Developer ID integrity verification/);
+  assert.doesNotMatch(workflow, /cannot auto-update on macOS/);
 });

@@ -5,6 +5,7 @@ import {
   getDesktopUpdateState,
   subscribeDesktopUpdates,
 } from "../services/desktopUpdates.js";
+import { createWallpaperApplySnapshot } from "../services/wallpaperApplyRequest.js";
 
 // Toast auto-dismiss durations (ms). Success lingers a touch longer than
 // warnings/errors so a positive result stays readable.
@@ -32,6 +33,8 @@ export function useWallpaperStatus() {
 
   const statusTimerRef = useRef(null);
   const readyUpdateRef = useRef(null);
+  const applyInFlightRef = useRef(false);
+  const lastApplyRequestRef = useRef(null);
 
   const showFeedback = useCallback((tone, message, options = {}) => {
     const source = options.source ?? "system";
@@ -125,7 +128,15 @@ export function useWallpaperStatus() {
 
   const handleApplyWallpaper = useCallback(
     async (media, force = false) => {
-      if (applyState === "applying") return;
+      if (applyInFlightRef.current) return;
+      const request = force ? lastApplyRequestRef.current : createWallpaperApplySnapshot(media);
+      if (!request) {
+        showApplyStatus("error", "没有可重新应用的壁纸，请先选择并设置一个素材");
+        return;
+      }
+
+      if (!force) lastApplyRequestRef.current = request;
+      applyInFlightRef.current = true;
       window.clearTimeout(statusTimerRef.current);
       if (force) setConflictOpen(false);
       setApplyState("applying");
@@ -134,16 +145,25 @@ export function useWallpaperStatus() {
         source: "wallpaper",
         message: force
           ? "正在重新应用壁纸…"
-          : media.kind === "video"
+          : request.kind === "video"
             ? "正在启动动态壁纸…"
             : "正在设置桌面壁纸…",
       });
-      const result = await applyDesktopWallpaper(media, { force });
-      if (result.status === "conflict") setConflictOpen(true);
-      if (result.status === "success") setHasWallpaperRecovery(true);
-      showApplyStatus(result.status, result.message);
+      try {
+        const result = await applyDesktopWallpaper(request, { force });
+        if (result.status === "conflict") setConflictOpen(true);
+        if (result.status === "success") setHasWallpaperRecovery(true);
+        showApplyStatus(result.status, result.message);
+      } finally {
+        applyInFlightRef.current = false;
+      }
     },
-    [applyState, showApplyStatus],
+    [showApplyStatus],
+  );
+
+  const retryLastWallpaper = useCallback(
+    () => handleApplyWallpaper(null, true),
+    [handleApplyWallpaper],
   );
 
   const handleInstallUpdate = useCallback(async () => {
@@ -201,8 +221,7 @@ export function useWallpaperStatus() {
           updateState: state,
         });
       } else if (state.state === "unsupported") {
-        const message =
-          state.message ?? "当前版本暂不支持自动更新，请手动下载安装新版本";
+        const message = state.message ?? "当前版本暂不支持自动更新，请手动下载安装新版本";
         const noticeKey = `unsupported:${state.reason ?? message}`;
         if (noticeKey === lastNoticeKey) return;
         lastNoticeKey = noticeKey;
@@ -268,6 +287,7 @@ export function useWallpaperStatus() {
     showFeedback,
     showUploadResult,
     handleApplyWallpaper,
+    retryLastWallpaper,
     handleInstallUpdate,
     dismissUpdate,
   };

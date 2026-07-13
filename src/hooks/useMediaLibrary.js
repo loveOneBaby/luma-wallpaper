@@ -2,17 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import demoImage from "../assets/ocean-morning.png";
 import demoVideo from "../assets/ocean-morning.mp4";
 import { getBridge } from "../services/desktopBridge.js";
-import { loadLibraryState, saveLibraryState } from "../services/libraryStorage.js";
+import {
+  estimateLibraryStorage,
+  flushPendingLibrarySaves,
+  loadLibraryState,
+  saveLibraryState,
+} from "../services/libraryStorage.js";
 import { pickDesktopMedia, releaseDesktopMedia } from "../services/desktopWallpaper.js";
 import { resolveDroppedDesktopMedia } from "../services/desktopUpdates.js";
+import { validateBrowserFiles } from "../services/mediaValidation.js";
 import { kindFromExtension } from "../../shared/mediaExtensions.js";
 
 const MAX_UPLOAD_BATCH = 100;
 const MAX_LIBRARY_ITEMS = 1000;
-const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
-const VALIDATION_WORKERS = 8;
-const MEDIA_VALIDATION_TIMEOUT_MS = 8_000;
 const VALID_CATEGORIES = new Set(["all", "image", "video", "favorite"]);
 const CATEGORY_ALIASES = {
   images: "image",
@@ -53,90 +55,6 @@ function createId() {
 function browserSourceKey(file, kind) {
   const name = typeof file?.name === "string" ? file.name : "unnamed";
   return `browser:${kind}:${name.toLowerCase()}:${file?.size ?? 0}:${file?.lastModified ?? 0}`;
-}
-
-function validateImage(file) {
-  return new Promise((resolve) => {
-    const src = URL.createObjectURL(file);
-    const image = new Image();
-    let settled = false;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      image.onload = null;
-      image.onerror = null;
-      URL.revokeObjectURL(src);
-      resolve(result);
-    };
-    const timer = window.setTimeout(() => finish(false), MEDIA_VALIDATION_TIMEOUT_MS);
-    image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0);
-    image.onerror = () => finish(false);
-    image.src = src;
-  });
-}
-
-function validateVideo(file) {
-  return new Promise((resolve) => {
-    const src = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    let settled = false;
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      video.onloadeddata = null;
-      video.onerror = null;
-      video.removeAttribute("src");
-      video.load();
-      URL.revokeObjectURL(src);
-      resolve(result);
-    };
-    const timer = window.setTimeout(() => finish(false), MEDIA_VALIDATION_TIMEOUT_MS);
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.onloadeddata = () => finish(video.videoWidth > 0 && video.videoHeight > 0);
-    video.onerror = () => finish(false);
-    video.src = src;
-    video.load();
-  });
-}
-
-async function validateBrowserFile(file) {
-  if (!file || !Number.isFinite(file.size) || file.size <= 0) {
-    return { kind: null, reason: "invalid" };
-  }
-
-  const kind = kindFromExtension(file.name);
-  if (!kind) return { kind: null, reason: "unsupported" };
-  if (kind === "image" && file.size > MAX_IMAGE_BYTES) {
-    return { kind: null, reason: "too-large" };
-  }
-  if (kind === "video" && file.size > MAX_VIDEO_BYTES) {
-    return { kind: null, reason: "too-large" };
-  }
-
-  const decodable = kind === "image" ? await validateImage(file) : await validateVideo(file);
-  return decodable ? { kind, reason: null } : { kind: null, reason: "decode" };
-}
-
-async function validateBrowserFiles(files) {
-  const results = new Array(files.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < files.length) {
-      const index = cursor;
-      cursor += 1;
-      results[index] = await validateBrowserFile(files[index]);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(VALIDATION_WORKERS, files.length) }, () => worker()),
-  );
-  return results;
 }
 
 function serializeItem(item, isDesktop) {
@@ -230,6 +148,13 @@ function restoreItems(state, objectUrls) {
   return [...demos, ...restored];
 }
 
+function persistenceFailureMessage(reason) {
+  if (reason === "quota") return "媒体库未保存：浏览器可用空间不足，请移除部分素材后重试";
+  if (reason === "unavailable") return "媒体库未保存：当前环境无法使用本地存储";
+  if (reason === "stale") return "媒体库已在另一个 Luma 页面更新，请刷新后再继续编辑";
+  return "媒体库未保存：写入本地存储失败，请稍后重试";
+}
+
 /** Owns the uploaded media library, persistence, selection and ingestion. */
 export function useMediaLibrary({ showFeedback, showUploadResult }) {
   const [items, setItems] = useState(() => DEMO_ITEMS.map((item) => ({ ...item })));
@@ -238,14 +163,22 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
   const [isLibraryOpen, setLibraryOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isPersistenceEnabled, setPersistenceEnabled] = useState(false);
+  const [persistenceState, setPersistenceState] = useState({ status: "idle", reason: null });
 
   const fileInputRef = useRef(null);
   const dragDepthRef = useRef(0);
   const objectUrlsRef = useRef(new Set());
   const itemsRef = useRef(items);
   const sourceKeysRef = useRef(new Set(items.map((item) => item.sourceKey).filter(Boolean)));
-  const storageWarningRef = useRef(false);
+  const storageWarningRef = useRef(null);
   const importQueueRef = useRef(Promise.resolve());
+  const validationAbortRef = useRef(new AbortController());
+  const persistenceTimerRef = useRef(null);
+  const persistenceSnapshotRef = useRef(null);
+  const persistenceSequenceRef = useRef(0);
+  const persistenceItemsRef = useRef(items);
+  const mountedRef = useRef(true);
 
   const commitItems = useCallback((nextItems) => {
     itemsRef.current = nextItems;
@@ -273,13 +206,26 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     sourceKeysRef.current = new Set(items.map((item) => item.sourceKey).filter(Boolean));
   }, [items]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    if (validationAbortRef.current.signal.aborted) {
+      validationAbortRef.current = new AbortController();
+    }
+    return () => {
+      mountedRef.current = false;
+      validationAbortRef.current.abort();
+    };
+  }, []);
+
   const media = items.find((item) => item.id === selectedId) ?? items[0];
 
   useEffect(() => {
     let active = true;
     loadLibraryState()
       .then((state) => {
-        if (!active || !state) return;
+        if (!active) return;
+        setPersistenceEnabled(true);
+        if (!state) return;
         const restoredObjectUrls = new Set();
         let restored;
         try {
@@ -294,17 +240,14 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
         }
         restoredObjectUrls.forEach((url) => objectUrlsRef.current.add(url));
         commitItems(restored);
-        const retainedSourceKeys = new Set(
-          restored.map((item) => item.sourceKey).filter(Boolean),
-        );
+        const retainedSourceKeys = new Set(restored.map((item) => item.sourceKey).filter(Boolean));
         const truncatedDesktopPaths = [
           ...new Set(
             (Array.isArray(state.items) ? state.items : [])
               .filter((item) => {
                 const filePath = item?.filePath ?? item?.path;
                 if (typeof filePath !== "string") return false;
-                const sourceKey =
-                  item.sourceKey ?? `desktop:${item.identity ?? filePath}`;
+                const sourceKey = item.sourceKey ?? `desktop:${item.identity ?? filePath}`;
                 return !retainedSourceKeys.has(sourceKey);
               })
               .map((item) => item.filePath ?? item.path),
@@ -321,11 +264,18 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
           setActiveCategory(restoredCategory);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (active) {
-          showFeedback("warning", "未能恢复上次的媒体库，本次仍可正常使用", {
-            source: "library",
-          });
+          const blocked = /占用|超时/.test(error instanceof Error ? error.message : "");
+          showFeedback(
+            "warning",
+            blocked
+              ? "媒体库正在被其他 Luma 页面占用，请关闭旧页面后刷新"
+              : "未能恢复上次的媒体库，本次仍可正常使用",
+            {
+              source: "library",
+            },
+          );
         }
       })
       .finally(() => {
@@ -336,31 +286,92 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     };
   }, [commitItems, showFeedback]);
 
-  useEffect(() => {
-    if (!isHydrated) return undefined;
-    const timer = window.setTimeout(() => {
-      const isDesktop = Boolean(getBridge()?.isDesktop);
-      const state = {
-        version: 1,
-        items: items.map((item) => serializeItem(item, isDesktop)).filter(Boolean),
-        selectedId,
-        activeCategory,
-      };
-      saveLibraryState(state)
-        .then((result) => {
-          if (result?.ok !== false) return;
-          throw new Error("library-storage-unavailable");
-        })
-        .catch(() => {
-          if (storageWarningRef.current) return;
-          storageWarningRef.current = true;
-          showFeedback("warning", "媒体库暂时无法保存，请检查可用存储空间", {
+  const persistCurrentSnapshot = useCallback(
+    async ({ silent = false } = {}) => {
+      const snapshot = persistenceSnapshotRef.current;
+      if (!snapshot) return { ok: true };
+      const sequence = ++persistenceSequenceRef.current;
+      if (mountedRef.current) {
+        setPersistenceState((current) => ({ ...current, status: "saving" }));
+      }
+      const result = await saveLibraryState(snapshot);
+      if (sequence !== persistenceSequenceRef.current) return result;
+
+      if (result?.ok === false) {
+        const reason = result.reason ?? "write-failed";
+        if (mountedRef.current) setPersistenceState({ status: "unsaved", reason });
+        if (!silent && storageWarningRef.current !== reason) {
+          storageWarningRef.current = reason;
+          showFeedback("error", persistenceFailureMessage(reason), {
             source: "library",
+            duration: 7_200,
           });
-        });
+        }
+        return result;
+      }
+
+      if (mountedRef.current) setPersistenceState({ status: "saved", reason: null });
+      if (!silent && storageWarningRef.current) {
+        storageWarningRef.current = null;
+        showFeedback("success", "媒体库已重新保存", { source: "library" });
+      }
+      return result;
+    },
+    [showFeedback],
+  );
+
+  const flushPersistence = useCallback(
+    ({ silent = false } = {}) => {
+      window.clearTimeout(persistenceTimerRef.current);
+      persistenceTimerRef.current = null;
+      return persistCurrentSnapshot({ silent }).finally(() => flushPendingLibrarySaves());
+    },
+    [persistCurrentSnapshot],
+  );
+
+  useEffect(() => {
+    if (!isHydrated || !isPersistenceEnabled) return undefined;
+    const isDesktop = Boolean(getBridge()?.isDesktop);
+    persistenceSnapshotRef.current = {
+      version: 2,
+      items: items.map((item) => serializeItem(item, isDesktop)).filter(Boolean),
+      selectedId,
+      activeCategory,
+    };
+    window.clearTimeout(persistenceTimerRef.current);
+    const mediaChanged = persistenceItemsRef.current !== items;
+    persistenceItemsRef.current = items;
+    if (mediaChanged) {
+      persistenceTimerRef.current = null;
+      void persistCurrentSnapshot();
+      return undefined;
+    }
+    persistenceTimerRef.current = window.setTimeout(() => {
+      persistenceTimerRef.current = null;
+      void persistCurrentSnapshot();
     }, 180);
-    return () => window.clearTimeout(timer);
-  }, [activeCategory, isHydrated, items, selectedId, showFeedback]);
+    return () => window.clearTimeout(persistenceTimerRef.current);
+  }, [activeCategory, isHydrated, isPersistenceEnabled, items, persistCurrentSnapshot, selectedId]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (persistenceSnapshotRef.current) void flushPersistence({ silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && persistenceSnapshotRef.current) {
+        void flushPersistence({ silent: true });
+      }
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (persistenceSnapshotRef.current) void flushPersistence({ silent: true });
+    };
+  }, [flushPersistence]);
 
   const addBrowserFiles = useCallback(
     (fileList) => {
@@ -382,6 +393,20 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
         let rejected = Math.max(0, sourceFiles.length - MAX_UPLOAD_BATCH);
         let firstRejectionReason = rejected > 0 ? "too-many" : null;
 
+        const newFileBytes = files.reduce((total, file) => {
+          const kind = kindFromExtension(file?.name);
+          if (!kind || sourceKeysRef.current.has(browserSourceKey(file, kind))) return total;
+          return total + (Number(file?.size) || 0);
+        }, 0);
+        const storageEstimate = await estimateLibraryStorage(newFileBytes);
+        if (storageEstimate && !storageEstimate.enough) {
+          showFeedback("error", "浏览器可用空间不足，这批素材尚未添加", {
+            source: "upload",
+            duration: 7_200,
+          });
+          return;
+        }
+
         if (files.length > 4) {
           showFeedback("info", `正在检查 ${files.length} 个素材…`, {
             source: "upload",
@@ -390,7 +415,9 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
         }
         let validation;
         try {
-          validation = await validateBrowserFiles(files);
+          validation = await validateBrowserFiles(files, {
+            signal: validationAbortRef.current.signal,
+          });
         } catch {
           showFeedback("error", "素材检查失败，请重新选择文件", { source: "upload" });
           return;
@@ -439,6 +466,11 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
           rejected,
           reason: libraryFull ? "library-full" : firstRejectionReason,
         });
+        if (nextItems.length === 0 && firstRejectionReason === "resolution") {
+          showFeedback("error", "素材分辨率过高，请使用最长边不超过 8192 像素的文件", {
+            source: "upload",
+          });
+        }
         if (!nextItems.length) return;
         commitItems([...itemsRef.current, ...nextItems]);
         setSelectedId(nextItems[0].id);
@@ -655,6 +687,7 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     items,
     media,
     isHydrated,
+    persistenceState,
     selectedId,
     setSelectedId: selectMedia,
     activeCategory,

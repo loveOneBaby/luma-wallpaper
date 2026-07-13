@@ -90,6 +90,9 @@ export interface UpdateState {
   message?: string | null;
   lastError?: string | null;
   lastCheckedAt?: string | null;
+  signed?: boolean | null;
+  integrity?:
+    "developer-id" | "unverified" | "platform-managed" | "development" | "unsupported" | null;
 }
 
 export interface LumaDesktopBridge {
@@ -130,6 +133,9 @@ export interface LumaWallpaperBridge {
     message?: string;
   }): void;
   onMediaChanged(callback: (media: WallpaperMedia | null) => void): () => void;
+  onPlaybackControl(
+    callback: (control: { action: "pause" | "resume"; reason?: string }) => void,
+  ): () => void;
 }
 
 declare global {

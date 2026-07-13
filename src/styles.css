@@ -50,7 +50,7 @@ button {
   position: relative;
   width: 100vw;
   height: 100dvh;
-  min-height: 560px;
+  min-height: 0;
   overflow: hidden;
   isolation: isolate;
   background: #84dce4;
@@ -402,7 +402,7 @@ button {
 }
 
 .shelf-eyebrow {
-  color: rgba(9, 42, 52, 0.58);
+  color: rgba(9, 42, 52, 0.72);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.13em;
@@ -421,12 +421,12 @@ button {
 
 .category-tabs button {
   min-width: 54px;
-  height: 30px;
+  min-height: 40px;
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: rgba(9, 42, 52, 0.68);
+  color: rgba(9, 42, 52, 0.78);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -641,11 +641,12 @@ button {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  color: rgba(9, 42, 52, 0.67);
+  color: rgba(9, 42, 52, 0.78);
   font-size: 13px;
 }
 
 .empty-library button {
+  min-height: 40px;
   padding: 7px 12px;
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 999px;
@@ -661,6 +662,7 @@ button {
   left: 50%;
   min-height: 48px;
   max-width: min(560px, calc(100vw - 32px));
+  width: max-content;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -678,14 +680,14 @@ button {
   z-index: 8;
   top: 104px;
   left: 50%;
-  min-height: 36px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 0 13px;
   transform: translateX(-50%);
   border-radius: 999px;
-  color: rgba(9, 42, 52, 0.76);
+  color: rgba(9, 42, 52, 0.86);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -708,6 +710,12 @@ button {
   align-items: center;
   justify-content: flex-start;
   gap: 9px;
+}
+
+.status-toast > .glass-surface__content > span {
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .status-toast.is-success {
@@ -738,7 +746,7 @@ button {
 
 .status-action {
   flex: 0 0 auto;
-  min-height: 29px;
+  min-height: 40px;
   padding: 0 11px;
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 999px;
@@ -767,8 +775,8 @@ button {
 
 .status-dismiss {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -857,7 +865,7 @@ button {
 .conflict-eyebrow {
   display: block;
   margin-bottom: 6px;
-  color: rgba(9, 42, 52, 0.54);
+  color: rgba(9, 42, 52, 0.68);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -873,7 +881,7 @@ button {
 .conflict-copy p {
   max-width: 470px;
   margin: 0;
-  color: rgba(9, 42, 52, 0.72);
+  color: rgba(9, 42, 52, 0.82);
   font-size: 14px;
   line-height: 1.65;
 }
@@ -990,7 +998,7 @@ button {
     box-shadow 160ms ease;
 }
 
-.apply-button:hover:not(:disabled) {
+.apply-button:hover:not(:disabled):not([aria-disabled="true"]) {
   transform: translateY(-1px);
   box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.28),
@@ -999,7 +1007,7 @@ button {
     3px 0 15px rgba(255, 137, 218, 0.17);
 }
 
-.apply-button:active:not(:disabled) {
+.apply-button:active:not(:disabled):not([aria-disabled="true"]) {
   transform: scale(0.98);
 }
 
@@ -1010,7 +1018,7 @@ button {
 
 .apply-button.is-web-only {
   min-width: 164px;
-  color: rgba(9, 42, 52, 0.76);
+  color: rgba(9, 42, 52, 0.86);
   border-color: rgba(255, 255, 255, 0.72);
   background: rgba(238, 255, 255, 0.28);
   box-shadow:
@@ -1198,7 +1206,7 @@ button {
 }
 
 .drop-copy span {
-  color: rgba(9, 42, 52, 0.68);
+  color: rgba(9, 42, 52, 0.8);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
@@ -1428,7 +1436,6 @@ button:focus-visible,
 
   .category-tabs button {
     min-width: 0;
-    height: 28px;
     padding-inline: 9px;
     font-size: 11px;
   }
@@ -1447,11 +1454,13 @@ button:focus-visible,
   }
 
   .status-toast {
+    width: calc(100vw - 24px);
     align-items: flex-start;
     border-radius: 24px;
   }
 
   .status-toast > .glass-surface__content {
+    flex-wrap: wrap;
     align-items: flex-start;
   }
 
@@ -1564,11 +1573,11 @@ button:focus-visible,
   }
 
   .apply-button.is-web-only {
-    width: 60px;
-    min-width: 60px;
+    width: 68px;
+    min-width: 68px;
     padding-inline: 5px;
-    font-size: 9px;
-    line-height: 1.05;
+    font-size: 11px;
+    line-height: 1.1;
   }
 
   .file-name {
@@ -1590,6 +1599,78 @@ button:focus-visible,
     opacity: 1;
     transform: none;
   }
+}
+
+@media (pointer: coarse) {
+  .favorite-button,
+  .remove-media-button,
+  .conflict-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .favorite-button {
+    top: 4px;
+    right: 4px;
+  }
+
+  .remove-media-button {
+    top: 48px;
+    right: 4px;
+  }
+}
+
+@media (max-height: 620px) {
+  :root {
+    --dock-height: 72px;
+    --dock-bottom: 10px;
+  }
+
+  .topbar {
+    height: 68px;
+    padding-top: 10px;
+  }
+
+  .library-button,
+  .upload-button {
+    height: 46px;
+  }
+
+  .control-dock {
+    padding-block: 8px;
+  }
+
+  .file-name {
+    bottom: calc(var(--dock-bottom) + var(--dock-height) + 8px);
+  }
+
+  .media-shelf {
+    bottom: calc(var(--dock-bottom) + var(--dock-height) + 8px);
+    max-height: calc(100dvh - var(--dock-bottom) - var(--dock-height) - 78px);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .status-toast,
+  .wallpaper-recovery {
+    top: 68px;
+  }
+}
+
+.glass-surface--simplified.liquid-glass {
+  -webkit-backdrop-filter: blur(14px) saturate(140%) brightness(1.04);
+  backdrop-filter: blur(14px) saturate(140%) brightness(1.04);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.82),
+    inset 0 -1px rgba(105, 232, 244, 0.24),
+    0 12px 34px rgba(2, 50, 67, 0.14),
+    0 0 0 1px rgba(111, 242, 255, 0.38);
+}
+
+.glass-surface--reduced-transparency.liquid-glass {
+  background: linear-gradient(138deg, rgba(247, 255, 255, 0.94), rgba(205, 244, 246, 0.9));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

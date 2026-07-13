@@ -33,7 +33,7 @@
 
 也可以在 [Build and Release](https://github.com/loveOneBaby/luma-wallpaper/actions/workflows/release.yml) 页面手动运行流水线，并从对应运行记录下载构建产物。
 
-> `v0.1.4` 及更早的公开构建未进行 Apple Developer 公证或商业代码签名。macOS 首次打开时可能需要在系统安全设置中确认，Windows 也可能显示未知发布者提示。新的标签发布会强制要求 macOS Developer ID 签名和公证；Windows 未配置证书时仍可构建，但流水线会给出明确的未签名警告。
+> 未配置签名凭据的公开构建不会进行 Apple Developer 公证或商业代码签名。macOS 首次打开时可能需要在系统安全设置中确认，Windows 也可能显示未知发布者提示。流水线会清楚标记未签名产物；正式公开分发仍建议配置 macOS Developer ID、公证和 Windows Authenticode 签名。
 
 ## 本地开发
 
@@ -61,7 +61,7 @@ npm run desktop:build:win
 
 `.github/workflows/pages.yml` 会在 pull request 上执行依赖审计、测试、lint 和生产构建；推送到 `main` 后还会把 `dist` 发布到 GitHub Pages。
 
-首次使用前，需要在仓库 **Settings → Pages → Build and deployment** 中将 Source 选为 **GitHub Actions**。配置后页面地址为：
+仓库已启用 GitHub Actions 作为 Pages 发布源，页面地址为：
 
 <https://loveonebaby.github.io/luma-wallpaper/>
 
@@ -70,8 +70,8 @@ npm run desktop:build:win
 推送与 `package.json` 版本一致的 `v*` 标签会构建全部平台，并把产物与更新清单发布到源仓库的 [GitHub Releases](https://github.com/loveOneBaby/luma-wallpaper/releases)（用 `GITHUB_TOKEN` 即可，无需额外令牌）。桌面端自动更新通过 electron-updater 的 `github` provider 查询源仓库的 `latest*.yml`。
 
 ```bash
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 不要在仅修改版本号前提前创建标签；先等待 `main` 的 Web CI 通过，再推送标签。手动运行 `Build and Release` 会生成可下载的桌面端 Actions Artifacts，但不会创建 Release。桌面发布复用已经通过测试的 renderer 产物，不会在三个系统上重复构建前端。

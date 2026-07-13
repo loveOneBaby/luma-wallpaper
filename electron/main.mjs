@@ -27,6 +27,10 @@ import {
 } from "./auto-update.mjs";
 import { attachWindowToWorkerW } from "./windows-workerw.mjs";
 import {
+  shouldResumeWallpaperPlayback,
+  transitionWallpaperPowerState,
+} from "./wallpaper-lifecycle.mjs";
+import {
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
   kindFromExtension,
@@ -87,6 +91,7 @@ let persistedStateCache = null;
 let stateWriteQueue = Promise.resolve();
 let wallpaperOperationQueue = Promise.resolve();
 let wallpaperTransitionInProgress = false;
+let wallpaperPowerState = { sleeping: false, locked: false, suspended: false };
 const playbackWaiters = new Map();
 const confirmedPlaybackTokens = new Set();
 const reportedPlaybackErrors = new Set();
@@ -578,6 +583,17 @@ function notifyWallpaperError(message, code = "PLAYBACK_FAILED") {
   });
 }
 
+function sendWallpaperPlaybackControl(action, reason) {
+  if (
+    !wallpaperWindow ||
+    wallpaperWindow.isDestroyed() ||
+    wallpaperWindow.webContents.isDestroyed()
+  ) {
+    return;
+  }
+  wallpaperWindow.webContents.send("luma:wallpaper:playback-control", { action, reason });
+}
+
 async function refreshWallpaperPlacement(reason = "display-change") {
   if (!wallpaperWindow || wallpaperWindow.isDestroyed() || wallpaperMedia?.kind !== "video") return;
   try {
@@ -599,7 +615,14 @@ function scheduleWallpaperPlacementRefresh(reason, delay = DISPLAY_REFRESH_DELAY
   if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
   displayRefreshTimer = setTimeout(() => {
     displayRefreshTimer = null;
-    refreshWallpaperPlacement(reason).catch((error) => console.error(error));
+    if (wallpaperPowerState.suspended) return;
+    refreshWallpaperPlacement(reason)
+      .then(() => {
+        if (shouldResumeWallpaperPlayback(wallpaperPowerState)) {
+          sendWallpaperPlaybackControl("resume", reason);
+        }
+      })
+      .catch((error) => console.error(error));
   }, delay);
   displayRefreshTimer.unref?.();
 }
@@ -790,6 +813,9 @@ async function activateVideoWallpaper(media, playbackToken) {
         playbackResult.message ||
           (playbackResult.status === "timeout" ? "动态壁纸播放确认超时" : "动态壁纸无法播放"),
       );
+    }
+    if (wallpaperPowerState.suspended) {
+      sendWallpaperPlaybackControl("pause", "system-suspended");
     }
     return { verified: true, verification: "playing", code: "OK" };
   } catch (error) {
@@ -1193,8 +1219,25 @@ function registerDisplayLifecycle() {
   screen.on("display-metrics-changed", () =>
     scheduleWallpaperPlacementRefresh("display-metrics-changed"),
   );
-  powerMonitor.on("resume", () => scheduleWallpaperPlacementRefresh("resume"));
-  powerMonitor.on("unlock-screen", () => scheduleWallpaperPlacementRefresh("unlock-screen"));
+  const handlePowerEvent = (eventName) => {
+    const transition = transitionWallpaperPowerState(wallpaperPowerState, eventName);
+    wallpaperPowerState = {
+      sleeping: transition.sleeping,
+      locked: transition.locked,
+      suspended: transition.suspended,
+    };
+    if (transition.command === "pause") {
+      if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
+      displayRefreshTimer = null;
+      sendWallpaperPlaybackControl("pause", eventName);
+      return;
+    }
+    if (transition.refreshPlacement) scheduleWallpaperPlacementRefresh(eventName);
+  };
+  powerMonitor.on("suspend", () => handlePowerEvent("suspend"));
+  powerMonitor.on("lock-screen", () => handlePowerEvent("lock-screen"));
+  powerMonitor.on("resume", () => handlePowerEvent("resume"));
+  powerMonitor.on("unlock-screen", () => handlePowerEvent("unlock-screen"));
 }
 
 async function restoreLastVideoWallpaper() {
