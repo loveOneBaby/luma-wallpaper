@@ -3,6 +3,7 @@ import {
   applyDesktopWallpaper,
   pauseDesktopWallpaper,
   resumeDesktopWallpaper,
+  setOpenAtLoginDesktop,
   stopDesktopWallpaper,
   subscribeWallpaperRuntime,
   subscribeWallpaperRuntimeState,
@@ -172,13 +173,25 @@ export function useWallpaperStatus() {
             : (request.filePath ?? null);
           setAppliedMatchKey(matchKey);
           setWallpaperRuntime({ status: "running", kind: request.kind, matchKey });
+          if (
+            request.kind === "video"
+            && typeof localStorage !== "undefined"
+            && !localStorage.getItem("luma.asked-startup")
+          ) {
+            localStorage.setItem("luma.asked-startup", "1");
+            showFeedback("info", "开机自动启动 Luma，继续播放动态壁纸？", {
+              source: "startup",
+              persistent: true,
+              startupPrompt: true,
+            });
+          }
         }
         showApplyStatus(result.status, result.message);
       } finally {
         applyInFlightRef.current = false;
       }
     },
-    [showApplyStatus],
+    [showApplyStatus, showFeedback],
   );
 
   const retryLastWallpaper = useCallback(
@@ -239,6 +252,17 @@ export function useWallpaperStatus() {
     }
     return handleCheckForUpdates();
   }, [handleInstallUpdate, handleCheckForUpdates]);
+
+  const handleConfirmStartup = useCallback(async () => {
+    try {
+      await setOpenAtLoginDesktop(true);
+      showFeedback("success", "已设置开机自动启动", { source: "startup" });
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : "无法设置开机自启", {
+        source: "startup",
+      });
+    }
+  }, [showFeedback]);
 
   useEffect(() => {
     let active = true;
@@ -401,5 +425,6 @@ export function useWallpaperStatus() {
     reopenUpdate,
     handleRetryUpdate,
     handleCheckForUpdates,
+    handleConfirmStartup,
   };
 }

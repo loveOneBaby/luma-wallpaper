@@ -3,6 +3,7 @@ import {
   ArrowClockwiseIcon,
   HeartIcon,
   ImageIcon,
+  MagnifyingGlassIcon,
   PlayIcon,
   TrashIcon,
   VideoCameraIcon,
@@ -219,17 +220,19 @@ export const MediaShelf = memo(function MediaShelf({
     width: 1_024,
     tileExtent: DESKTOP_TILE_EXTENT,
   });
-  const visibleItems = useMemo(
-    () =>
-      items.filter((item) => {
-        if (activeCategory === "favorite") return item.favorite;
-        if (activeCategory === "image" || activeCategory === "video") {
-          return item.kind === activeCategory;
-        }
-        return true;
-      }),
-    [activeCategory, items],
-  );
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const visibleItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      if (activeCategory === "favorite" && !item.favorite) return false;
+      if (activeCategory === "image" || activeCategory === "video") {
+        if (item.kind !== activeCategory) return false;
+      }
+      if (query && !item.name.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [activeCategory, items, searchQuery]);
 
   useEffect(() => {
     const strip = stripRef.current;
@@ -310,6 +313,30 @@ export const MediaShelf = memo(function MediaShelf({
           <span className="shelf-eyebrow">MY WALLPAPERS</span>
           <h2>媒体库</h2>
         </div>
+
+        {searchOpen ? (
+          <input
+            className="shelf-search-input"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜索文件名…"
+            aria-label="搜索媒体库"
+            autoFocus
+          />
+        ) : null}
+        <button
+          className="shelf-search-toggle"
+          type="button"
+          onClick={() => {
+            setSearchOpen((value) => !value);
+            if (searchOpen) setSearchQuery("");
+          }}
+          aria-label={searchOpen ? "关闭搜索" : "搜索媒体库"}
+          aria-expanded={searchOpen}
+        >
+          <MagnifyingGlassIcon size={18} weight="regular" aria-hidden="true" />
+        </button>
 
         <div className="category-tabs" role="tablist" aria-label="壁纸分类">
           {CATEGORIES.map((category, index) => (

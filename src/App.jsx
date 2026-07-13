@@ -45,6 +45,7 @@ export function App() {
     reopenUpdate,
     handleRetryUpdate,
     handleCheckForUpdates,
+    handleConfirmStartup,
   } = useWallpaperStatus();
 
   const stopIfApplied = useCallback(
@@ -223,6 +224,7 @@ export function App() {
         onRetryUpdate={handleRetryUpdate}
         onCheckForUpdates={handleCheckForUpdates}
         onUndoRemove={undoRemove}
+        onConfirmStartup={handleConfirmStartup}
         inert={isFullscreen || isConflictOpen}
       />
 

@@ -1808,6 +1808,73 @@ button:focus-visible,
   background: rgba(111, 242, 255, 1);
 }
 
+/* P2-6: shelf search */
+
+.shelf-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.5);
+  color: #04303a;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.shelf-search-toggle:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.shelf-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 17px;
+  border: none;
+  background: rgba(255, 255, 255, 0.7);
+  color: #04303a;
+  font-size: 13px;
+  outline: none;
+}
+
+.shelf-search-input:focus {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 2px rgba(111, 242, 255, 0.5);
+}
+
+/* P2-7: web download dialog */
+
+.web-download-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.web-download-link {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #04303a;
+  background: rgba(111, 242, 255, 0.55);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.web-download-link:hover {
+  background: rgba(111, 242, 255, 0.8);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

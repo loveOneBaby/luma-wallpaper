@@ -55,6 +55,12 @@ export async function resumeDesktopWallpaper() {
   return bridge.resumeWallpaper();
 }
 
+export async function setOpenAtLoginDesktop(openAtLogin) {
+  const bridge = getBridge();
+  if (!bridge?.setOpenAtLogin) return { ok: false, supported: false };
+  return bridge.setOpenAtLogin(openAtLogin === true);
+}
+
 export async function releaseDesktopMedia(paths) {
   const bridge = getBridge();
   if (!bridge?.releaseMedia) return { ok: false, released: 0 };

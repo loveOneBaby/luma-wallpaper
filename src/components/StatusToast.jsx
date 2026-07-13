@@ -22,6 +22,7 @@ export function StatusToast({
   onRetryUpdate,
   onCheckForUpdates,
   onUndoRemove,
+  onConfirmStartup,
   inert = false,
 }) {
   const isDesktop = platform === "darwin" || platform === "win32";
@@ -163,6 +164,20 @@ export function StatusToast({
         <button className="status-action status-update" type="button" onClick={onUndoRemove}>
           撤销
         </button>
+      ) : null}
+      {feedback.startupPrompt ? (
+        <>
+          <button className="status-action status-update" type="button" onClick={onConfirmStartup}>
+            是
+          </button>
+          <button
+            className="status-action"
+            type="button"
+            onClick={onDismissUpdate}
+          >
+            稍后
+          </button>
+        </>
       ) : null}
     </GlassSurface>
   );

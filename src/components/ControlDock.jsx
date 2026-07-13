@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ArrowsInIcon,
   ArrowsOutIcon,
@@ -10,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_CONTROL_DOCK } from "./glassPresets.js";
+import { WebDownloadDialog } from "./WebDownloadDialog.jsx";
 
 function formatTime(value) {
   if (!Number.isFinite(value) || value < 0) return "00:00";
@@ -39,10 +41,15 @@ export function ControlDock({
   const isVideo = mediaKind === "video";
   const isDesktop = platform === "darwin" || platform === "win32";
   const isApplyUnavailable = isApplying || !isDesktop;
+  const [isWebDownloadOpen, setWebDownloadOpen] = useState(false);
 
   const handleApply = (event) => {
-    if (isApplyUnavailable) {
+    if (isApplying) {
       event.preventDefault();
+      return;
+    }
+    if (!isDesktop) {
+      setWebDownloadOpen(true);
       return;
     }
     onApply();
@@ -137,6 +144,12 @@ export function ControlDock({
         )}
         <span>{isDesktop ? "设为壁纸" : "桌面端可设置"}</span>
       </button>
+
+      <WebDownloadDialog
+        open={isWebDownloadOpen}
+        onClose={() => setWebDownloadOpen(false)}
+        inert={inert}
+      />
     </GlassSurface>
   );
 }
