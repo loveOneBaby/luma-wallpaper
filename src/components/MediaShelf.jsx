@@ -1,5 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { HeartIcon, ImageIcon, PlayIcon, TrashIcon, VideoCameraIcon } from "@phosphor-icons/react";
+import {
+  ArrowClockwiseIcon,
+  HeartIcon,
+  ImageIcon,
+  PlayIcon,
+  TrashIcon,
+  VideoCameraIcon,
+} from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_MEDIA_SHELF } from "./glassPresets.js";
 
@@ -103,13 +110,15 @@ const MediaTile = memo(function MediaTile({
   item,
   isSelected,
   isApplied = false,
+  missing = false,
   onSelect,
   onToggleFavorite,
   onRemove,
+  onRelocate,
   disabled,
 }) {
   return (
-    <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""}`}>
+    <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""} ${missing ? "is-missing" : ""}`}>
       {isApplied ? (
         <span className="applied-badge" aria-label="正在使用">
           <span className="applied-dot" aria-hidden="true" />
@@ -171,6 +180,19 @@ const MediaTile = memo(function MediaTile({
           <TrashIcon size={15} weight="bold" aria-hidden="true" />
         </button>
       ) : null}
+
+      {missing ? (
+        <button
+          className="relocate-button"
+          type="button"
+          onClick={() => onRelocate(item.id)}
+          disabled={disabled}
+          aria-label={`重新定位 ${item.name}`}
+        >
+          <ArrowClockwiseIcon size={15} weight="bold" aria-hidden="true" />
+          重新定位
+        </button>
+      ) : null}
     </article>
   );
 });
@@ -183,6 +205,7 @@ export const MediaShelf = memo(function MediaShelf({
   onSelect,
   onToggleFavorite,
   onRemove,
+  onRelocate,
   onUpload,
   isReady = true,
   inert = false,
@@ -336,6 +359,8 @@ export const MediaShelf = memo(function MediaShelf({
               onSelect={onSelect}
               onToggleFavorite={onToggleFavorite}
               onRemove={onRemove}
+              onRelocate={onRelocate}
+              missing={item.missing === true}
               disabled={!isReady}
             />
           ))}

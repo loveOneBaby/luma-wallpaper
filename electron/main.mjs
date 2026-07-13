@@ -435,7 +435,24 @@ function sanitizeLibraryForStorage(request, { allowedIdentities = null } = {}) {
       seenIds.add(id);
       seenSources.add(sourceKey);
     } catch {
-      // Removed or inaccessible media is deliberately not persisted.
+      // Keep moved/inaccessible media marked as missing so the user can
+      // re-locate it instead of silently losing it from the library.
+      const fallbackSource = item.sourceKey ?? `desktop:${requestedPath}`;
+      if (seenSources.has(fallbackSource)) continue;
+      const fallbackKind = mediaKind(requestedPath) ?? (item.kind === "video" ? "video" : "image");
+      storedItems.push({
+        id,
+        name: safeText(item.name, path.basename(requestedPath) || "未知素材", 240),
+        kind: fallbackKind,
+        favorite: item.favorite === true,
+        isDemo: false,
+        demoKey: null,
+        sourceKey: fallbackSource,
+        filePath: requestedPath,
+        missing: true,
+      });
+      seenIds.add(id);
+      seenSources.add(fallbackSource);
     }
   }
 

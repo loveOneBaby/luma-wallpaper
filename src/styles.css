@@ -1762,6 +1762,52 @@ button:focus-visible,
   filter: brightness(1.05);
 }
 
+/* P1-3: missing media tile + relocate button */
+
+.media-tile.is-missing .media-tile-preview,
+.media-tile.is-missing video {
+  filter: grayscale(0.7) opacity(0.5);
+}
+
+.media-tile.is-missing::after {
+  content: "文件已丢失";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b00;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.relocate-button {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #04303a;
+  background: rgba(111, 242, 255, 0.85);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.relocate-button:hover {
+  background: rgba(111, 242, 255, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

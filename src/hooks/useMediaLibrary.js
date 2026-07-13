@@ -628,6 +628,41 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     [commitItems, ensureHydrated, selectedId, showFeedback],
   );
 
+  const relocateMedia = useCallback(
+    async (id) => {
+      const target = itemsRef.current.find((item) => item.id === id);
+      if (!target) return;
+      try {
+        const result = await pickDesktopMedia();
+        if (result.canceled || !result.files.length) return;
+        const file = result.files[0];
+        const sourceKey = `desktop:${file.identity ?? file.path}`;
+        const nextItems = itemsRef.current.map((item) => (
+          item.id === id
+            ? {
+                ...item,
+                filePath: file.path,
+                src: file.url,
+                name: file.name,
+                kind: file.kind,
+                sourceKey,
+                missing: false,
+                objectUrl: false,
+              }
+            : item
+        ));
+        sourceKeysRef.current.delete(target.sourceKey);
+        commitItems(nextItems);
+        showFeedback("success", `已重新定位为 ${file.name}`, { source: "library" });
+      } catch (error) {
+        showFeedback("error", error instanceof Error ? error.message : "无法重新定位文件", {
+          source: "library",
+        });
+      }
+    },
+    [commitItems, showFeedback],
+  );
+
   const handleDrop = useCallback(
     async (event) => {
       event.preventDefault();
@@ -700,6 +735,7 @@ export function useMediaLibrary({ showFeedback, showUploadResult }) {
     openFilePicker,
     toggleFavorite,
     removeMedia,
+    relocateMedia,
     handleDrop,
     handleDragEnter,
     handleDragOver,

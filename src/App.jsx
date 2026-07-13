@@ -63,6 +63,7 @@ export function App() {
     openFilePicker,
     toggleFavorite,
     removeMedia,
+    relocateMedia,
     handleDrop,
     handleDragEnter,
     handleDragOver,
@@ -224,6 +225,7 @@ export function App() {
           onSelect={setSelectedId}
           onToggleFavorite={toggleFavorite}
           onRemove={removeMedia}
+          onRelocate={relocateMedia}
           onUpload={openFilePicker}
           isReady={isHydrated}
           inert={isConflictOpen}
