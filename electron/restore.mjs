@@ -1,6 +1,9 @@
 import { state } from "./app-state.mjs";
-import { enqueueWallpaperOperation } from "./media-tokens.mjs";
-import { readPersistedState, updatePersistedState } from "./library-state.mjs";
+import {
+  readPersistedState,
+  updatePersistedState,
+  enqueueWallpaperOperation,
+} from "./library-state.mjs";
 import {
   resolveMediaRequest,
   setVideoWallpaper,
@@ -32,4 +35,3 @@ export async function restoreLastVideoWallpaper() {
     publishWallpaperRuntime({ status: "stopped" });
   }
 }
-

@@ -9,7 +9,7 @@ import {
   comparablePath,
   isMainWindowSender,
   releaseMediaTokens,
-  enqueueWallpaperOperation,
+  settlePlayback,
 } from "./media-tokens.mjs";
 import {
   loadLibraryState,
@@ -17,6 +17,7 @@ import {
   rememberLastApplied,
   clearLastApplied,
   readPersistedState,
+  enqueueWallpaperOperation,
 } from "./library-state.mjs";
 import {
   resolveMediaRequest,
@@ -28,7 +29,6 @@ import {
   setImageWallpaper,
   setVideoWallpaper,
   dependencyMessage,
-  settlePlayback,
 } from "./wallpaper-apply.mjs";
 import {
   getAutoUpdateState,
@@ -249,7 +249,8 @@ export function registerIpc() {
   });
 
   ipcMain.handle("luma:wallpaper:get-media", (event) => {
-    if (!state.wallpaperWindow || event.sender.id !== state.wallpaperWindow.webContents.id) return null;
+    if (!state.wallpaperWindow || event.sender.id !== state.wallpaperWindow.webContents.id)
+      return null;
     return state.wallpaperMedia;
   });
 
@@ -266,15 +267,16 @@ export function registerIpc() {
   ipcMain.handle("luma:wallpaper:pause", (event) => {
     if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口暂停动态壁纸");
     sendWallpaperPlaybackControl("pause", "user");
-    if (state.wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "paused"));
+    if (state.wallpaperMedia)
+      publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "paused"));
     return { ok: true };
   });
 
   ipcMain.handle("luma:wallpaper:resume", (event) => {
     if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口恢复动态壁纸");
     sendWallpaperPlaybackControl("resume", "user");
-    if (state.wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "running"));
+    if (state.wallpaperMedia)
+      publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "running"));
     return { ok: true };
   });
 }
-
