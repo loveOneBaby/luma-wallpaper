@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyDesktopWallpaper, subscribeWallpaperRuntime } from "../services/desktopWallpaper.js";
 import {
+  downloadAndInstallDesktopUpdate,
   getDesktopUpdateState,
-  installDesktopUpdate,
   subscribeDesktopUpdates,
 } from "../services/desktopUpdates.js";
 
@@ -148,17 +148,17 @@ export function useWallpaperStatus() {
 
   const handleInstallUpdate = useCallback(async () => {
     readyUpdateRef.current = null;
-    showFeedback("installing", "正在关闭旧版本并安装更新…", {
+    showFeedback("updating", "正在准备更新…", {
       source: "update",
       persistent: true,
     });
     try {
-      const result = await installDesktopUpdate();
+      const result = await downloadAndInstallDesktopUpdate();
       if (result?.ok === false) {
-        showFeedback("error", result.message ?? "更新尚未准备好", { source: "update" });
+        showFeedback("error", result.message ?? "更新失败", { source: "update" });
       }
     } catch (error) {
-      showFeedback("error", error instanceof Error ? error.message : "无法开始安装更新", {
+      showFeedback("error", error instanceof Error ? error.message : "无法开始更新", {
         source: "update",
       });
     }
@@ -174,7 +174,13 @@ export function useWallpaperStatus() {
     let lastNoticeKey = null;
     const handleUpdateState = (state) => {
       if (!active || !state?.state) return;
-      if (state.state === "available" || state.state === "downloading") {
+      if (state.state === "available") {
+        showFeedback("success", state.message ?? "发现新版本", {
+          source: "update",
+          persistent: true,
+          updateState: state,
+        });
+      } else if (state.state === "downloading") {
         showFeedback("updating", state.message ?? "正在下载新版本…", {
           source: "update",
           persistent: true,
@@ -196,10 +202,7 @@ export function useWallpaperStatus() {
         });
       } else if (state.state === "unsupported") {
         const message =
-          state.message ??
-          (state.reason === "mac-signature-required"
-            ? "当前 macOS 版本未签名，请从发布页手动下载安装更新"
-            : "当前版本暂不支持自动更新，请手动下载安装新版本");
+          state.message ?? "当前版本暂不支持自动更新，请手动下载安装新版本";
         const noticeKey = `unsupported:${state.reason ?? message}`;
         if (noticeKey === lastNoticeKey) return;
         lastNoticeKey = noticeKey;

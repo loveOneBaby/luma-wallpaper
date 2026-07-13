@@ -104,6 +104,7 @@ export interface LumaDesktopBridge {
   getUpdateState(): Promise<UpdateState | null>;
   checkForUpdates(): Promise<UpdateState | null>;
   installUpdate(): Promise<{ ok: boolean; message?: string }>;
+  downloadAndInstallUpdate(): Promise<{ ok: boolean; message?: string }>;
   getOpenAtLogin(): Promise<{ supported: boolean; openAtLogin: boolean }>;
   setOpenAtLogin(openAtLogin: boolean): Promise<{
     ok: boolean;

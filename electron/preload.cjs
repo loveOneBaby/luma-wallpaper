@@ -34,6 +34,7 @@ const api = Object.freeze({
   getUpdateState: () => ipcRenderer.invoke("luma:update:get-state"),
   checkForUpdates: () => ipcRenderer.invoke("luma:update:check"),
   installUpdate: () => ipcRenderer.invoke("luma:update:install"),
+  downloadAndInstallUpdate: () => ipcRenderer.invoke("luma:update:download-install"),
   getOpenAtLogin: () => ipcRenderer.invoke("luma:startup:get"),
   setOpenAtLogin: (openAtLogin) => ipcRenderer.invoke("luma:startup:set", openAtLogin === true),
   onUpdateState: (callback) => subscribe("luma:update-state", callback),

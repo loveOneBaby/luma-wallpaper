@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import electronUpdater from "electron-updater";
-import { hasValidDeveloperIdApplicationSignature } from "./mac-signature.mjs";
 
 const { autoUpdater } = electronUpdater;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -124,20 +123,10 @@ function createPersistentLogger() {
   };
 }
 
-function hasDeveloperIdSignature() {
-  if (process.platform !== "darwin") return true;
-
-  const appBundlePath = path.resolve(path.dirname(process.execPath), "../..");
-  return hasValidDeveloperIdApplicationSignature(appBundlePath);
-}
-
 function updaterSupport() {
   if (!app.isPackaged) return { supported: false, reason: "development" };
   if (process.platform !== "darwin" && process.platform !== "win32") {
     return { supported: false, reason: "platform" };
-  }
-  if (process.platform === "darwin" && !hasDeveloperIdSignature()) {
-    return { supported: false, reason: "mac-signature-required" };
   }
   return { supported: true, reason: null };
 }
@@ -187,10 +176,7 @@ export function initializeAutoUpdates(options = {}) {
     state: support.supported ? "idle" : "unsupported",
     supported: support.supported,
     reason: support.reason,
-    message:
-      support.reason === "mac-signature-required"
-        ? "当前 macOS 版本未使用 Developer ID 签名，无法安全自动更新"
-        : null,
+    message: null,
     lastError: null,
     version: null,
     percent: null,
@@ -198,7 +184,7 @@ export function initializeAutoUpdates(options = {}) {
   if (!support.supported) return updateState;
 
   autoUpdater.allowPrerelease = false;
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.autoRunAppAfterInstall = true;
 
@@ -212,7 +198,7 @@ export function initializeAutoUpdates(options = {}) {
     publishState({
       state: "available",
       version: info?.version ?? null,
-      message: `发现 Luma v${info?.version ?? "新版本"}，正在下载…`,
+      message: `发现 Luma v${info?.version ?? "新版本"}`,
       lastError: null,
     });
   });
@@ -306,6 +292,33 @@ export async function installDownloadedUpdate() {
   }, INSTALL_GRACE_MS);
 
   return { ok: true };
+}
+
+export async function downloadAndInstallUpdate() {
+  if (!updateState.supported) {
+    return { ok: false, message: "当前版本暂不支持自动更新" };
+  }
+  if (updateState.state === "downloading" || updateState.state === "installing") {
+    return { ok: false, message: "更新正在进行中" };
+  }
+
+  try {
+    if (!updateReady) {
+      publishState({
+        state: "downloading",
+        percent: 0,
+        message: `正在下载 Luma v${updateState.version ?? "新版本"}…`,
+        lastError: null,
+      });
+      await autoUpdater.downloadUpdate();
+    }
+    return installDownloadedUpdate();
+  } catch (error) {
+    const lastError = conciseError(error) || "更新下载失败";
+    updateReady = false;
+    publishState({ state: "error", message: lastError, lastError });
+    return { ok: false, message: lastError };
+  }
 }
 
 export function stopAutoUpdates() {

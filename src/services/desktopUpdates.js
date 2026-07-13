@@ -25,3 +25,11 @@ export async function installDesktopUpdate() {
   }
   return bridge.installUpdate();
 }
+
+export async function downloadAndInstallDesktopUpdate() {
+  const bridge = getBridge();
+  if (!bridge?.downloadAndInstallUpdate) {
+    return { ok: false, message: "当前环境不支持自动更新" };
+  }
+  return bridge.downloadAndInstallUpdate();
+}

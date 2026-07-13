@@ -22,6 +22,7 @@ import {
   getAutoUpdateState,
   initializeAutoUpdates,
   installDownloadedUpdate,
+  downloadAndInstallUpdate,
   stopAutoUpdates,
 } from "./auto-update.mjs";
 import { attachWindowToWorkerW } from "./windows-workerw.mjs";
@@ -1043,6 +1044,11 @@ function registerIpc() {
   ipcMain.handle("luma:update:install", (event) => {
     if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口安装更新");
     return installDownloadedUpdate();
+  });
+
+  ipcMain.handle("luma:update:download-install", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口下载并安装更新");
+    return downloadAndInstallUpdate();
   });
 
   ipcMain.handle("luma:startup:get", (event) => {

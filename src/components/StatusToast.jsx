@@ -50,7 +50,9 @@ export function StatusToast({
 
   const showRecovery =
     feedback.source === "wallpaper" && feedback.tone === "success" && isDesktop;
-  const showUpdateActions = feedback.source === "update" && feedback.updateState?.state === "ready";
+  const showUpdateActions =
+    feedback.source === "update"
+    && (feedback.updateState?.state === "available" || feedback.updateState?.state === "ready");
 
   return (
     <GlassSurface
@@ -76,7 +78,7 @@ export function StatusToast({
       {showUpdateActions ? (
         <>
           <button className="status-action status-update" type="button" onClick={onInstallUpdate}>
-            重启并更新
+            {feedback.updateState?.state === "available" ? "更新" : "重启并更新"}
           </button>
           <button
             className="status-dismiss"
