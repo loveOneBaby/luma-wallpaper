@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import electronUpdater from "electron-updater";
-import { getUpdaterSupport } from "./update-support.mjs";
+import { getUpdaterSupport, resolveMacAppBundlePath } from "./update-support.mjs";
+import {
+  launchUnsignedMacUpdate,
+  prepareUnsignedMacUpdate,
+  selectUnsignedMacUpdateFile,
+} from "./unsigned-mac-update.mjs";
 
 const { autoUpdater } = electronUpdater;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -25,6 +30,9 @@ let intervalTimer = null;
 let getMainWindow = () => null;
 let beforeInstall = () => {};
 let updateLogger = console;
+let useUnsignedMacInstaller = false;
+let availableUpdateInfo = null;
+let downloadedUpdateFile = null;
 
 let updateState = {
   state: "idle",
@@ -184,14 +192,17 @@ export function initializeAutoUpdates(options = {}) {
   });
   if (!support.supported) return updateState;
   if (process.platform === "darwin" && !support.signed) {
+    useUnsignedMacInstaller = true;
     updateLogger.warn(
-      "macOS package has no valid Developer ID Application signature; automatic update remains enabled by self-distribution policy",
+      "macOS package has no valid Developer ID Application signature; using the self-distribution installer without publisher identity verification",
     );
   }
 
   autoUpdater.allowPrerelease = false;
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Squirrel.Mac rejects ad-hoc builds because every version has a different
+  // designated requirement. The unsigned path must never let Squirrel start.
+  autoUpdater.autoInstallOnAppQuit = !useUnsignedMacInstaller;
   autoUpdater.autoRunAppAfterInstall = true;
 
   autoUpdater.on("checking-for-update", () => {
@@ -201,6 +212,8 @@ export function initializeAutoUpdates(options = {}) {
   autoUpdater.on("update-available", (info) => {
     sawAvailableUpdate = true;
     lastProgress = -1;
+    availableUpdateInfo = info ?? null;
+    downloadedUpdateFile = null;
     publishState({
       state: "available",
       version: info?.version ?? null,
@@ -223,6 +236,8 @@ export function initializeAutoUpdates(options = {}) {
 
   autoUpdater.on("update-not-available", () => {
     sawAvailableUpdate = false;
+    availableUpdateInfo = null;
+    downloadedUpdateFile = null;
     publishState({
       state: "idle",
       version: null,
@@ -234,6 +249,21 @@ export function initializeAutoUpdates(options = {}) {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
+    if (useUnsignedMacInstaller) {
+      try {
+        selectUnsignedMacUpdateFile(info);
+        if (typeof info?.downloadedFile !== "string" || !info.downloadedFile.trim()) {
+          throw new Error("更新下载完成，但没有找到本地 ZIP");
+        }
+        availableUpdateInfo = info;
+        downloadedUpdateFile = info.downloadedFile;
+      } catch (error) {
+        updateReady = false;
+        const lastError = conciseError(error) || "更新清单无效";
+        publishState({ state: "error", message: lastError, lastError });
+        return;
+      }
+    }
     updateReady = true;
     publishState({
       state: "ready",
@@ -278,6 +308,40 @@ export async function installDownloadedUpdate() {
   if (!updateState.supported || !updateReady) {
     return { ok: false, message: "更新尚未下载完成" };
   }
+  // Consume the ready state synchronously so two IPC calls cannot prepare or
+  // launch competing installers against the same application bundle.
+  updateReady = false;
+
+  if (useUnsignedMacInstaller) {
+    publishState({
+      state: "installing",
+      message: "正在校验并准备更新…",
+      lastError: null,
+    });
+    try {
+      const preparedUpdate = await prepareUnsignedMacUpdate({
+        updateInfo: availableUpdateInfo,
+        downloadedFile: downloadedUpdateFile,
+        currentAppPath: resolveMacAppBundlePath(process.execPath),
+        resourcesPath: process.resourcesPath,
+        userDataPath: app.getPath("userData"),
+        architecture: process.arch,
+      });
+      await launchUnsignedMacUpdate(preparedUpdate);
+      publishState({
+        state: "installing",
+        message: "正在关闭旧版本并安装更新…",
+        lastError: null,
+      });
+      beforeInstall();
+      setTimeout(() => app.quit(), INSTALL_GRACE_MS);
+      return { ok: true };
+    } catch (error) {
+      const lastError = conciseError(error) || "无法启动 macOS 更新安装程序";
+      publishState({ state: "error", message: lastError, lastError });
+      return { ok: false, message: lastError };
+    }
+  }
 
   publishState({
     state: "installing",
@@ -292,7 +356,6 @@ export async function installDownloadedUpdate() {
       else autoUpdater.quitAndInstall();
     } catch (error) {
       const lastError = conciseError(error) || "无法启动更新安装程序";
-      updateReady = false;
       publishState({ state: "error", message: lastError, lastError });
     }
   }, INSTALL_GRACE_MS);

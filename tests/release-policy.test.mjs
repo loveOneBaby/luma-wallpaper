@@ -17,6 +17,8 @@ test("Windows installer name is stable and Electron security fuses are enabled",
   assert.equal(expanded, `Luma-${packageJson.version}-x64-Setup.exe`);
   assert.doesNotMatch(expanded, /\s/);
 
+  assert.equal(packageJson.build?.mac?.artifactName, "Luma-${version}-${arch}-mac.${ext}");
+
   assert.deepEqual(packageJson.build?.electronFuses, {
     runAsNode: false,
     enableCookieEncryption: true,
@@ -64,4 +66,5 @@ test("macOS release validates the notarized app bundle instead of an unstapled D
   assert.doesNotMatch(workflow, /xcrun stapler validate "\$dmg"/);
   assert.match(workflow, /no Developer ID integrity verification/);
   assert.doesNotMatch(workflow, /cannot auto-update on macOS/);
+  assert.doesNotMatch(workflow, /gh release upload[\s\S]*--clobber/);
 });

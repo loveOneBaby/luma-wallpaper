@@ -165,10 +165,19 @@ jobs:
 
           npx --no-install electron-builder "${BUILD_ARGS[@]}"
 
+          APP_PATH=$(find release -maxdepth 2 -type d -name 'Luma.app' -print -quit)
+          [[ -n "$APP_PATH" ]] || { echo "Packaged Luma.app was not found"; exit 1; }
+          HELPER_PATH="$APP_PATH/Contents/Resources/native/luma-mac-update-helper"
+          [[ -x "$HELPER_PATH" ]] || { echo "Native macOS update helper was not packaged"; exit 1; }
+          EXPECTED_ARCH="${{ matrix.arch }}"
+          [[ "$EXPECTED_ARCH" != "x64" ]] || EXPECTED_ARCH="x86_64"
+          /usr/bin/lipo -archs "$APP_PATH/Contents/MacOS/Luma" | grep -qw "$EXPECTED_ARCH"
+          /usr/bin/lipo -archs "$HELPER_PATH" | grep -qw "$EXPECTED_ARCH"
+          [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Contents/Info.plist")" == "com.luma.wallpaper" ]]
+          [[ "$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$APP_PATH/Contents/Info.plist")" == "$(node -p "require('./package.json').version")" ]]
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
           if (( configured == ${#values[@]} )); then
-            APP_PATH=$(find release -maxdepth 2 -type d -name 'Luma.app' -print -quit)
-            [[ -n "$APP_PATH" ]] || { echo "Packaged Luma.app was not found"; exit 1; }
-            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
             TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
             if [[ -z "$TEAM_ID" || "$TEAM_ID" == "not set" || "$TEAM_ID" == "not-set" ]]; then
               echo "Packaged app does not contain a Developer ID TeamIdentifier"
@@ -182,6 +191,10 @@ jobs:
         run: |
           compgen -G "release/*-mac.zip" >/dev/null
           compgen -G "release/*.blockmap" >/dev/null
+          zips=(release/*-mac.zip)
+          (( ${#zips[@]} == 1 )) || { echo "Expected exactly one macOS update ZIP"; exit 1; }
+          TOP_LEVEL=$(zipinfo -1 "${zips[0]}" | sed 's#/.*##' | sort -u)
+          [[ "$TOP_LEVEL" == "Luma.app" ]] || { echo "macOS update ZIP must contain only Luma.app"; exit 1; }
           node scripts/validate-update-artifacts.mjs \
             --dir release "release/latest-${{ matrix.arch }}-mac.yml"
 
@@ -298,14 +311,14 @@ jobs:
       - name: Validate merged update artifacts
         run: node scripts/validate-update-artifacts.mjs --dir release-assets
 
-      - name: Create or update release
+      - name: Create immutable release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+            echo "Release $GITHUB_REF_NAME already exists; assets will be verified without replacement."
           else
             gh release create "$GITHUB_REF_NAME" release-assets/* \
               --verify-tag \

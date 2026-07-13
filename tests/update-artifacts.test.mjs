@@ -9,6 +9,7 @@ import {
   normalizeArtifactReference,
   parseUpdateManifest,
   referencedArtifacts,
+  resolvePrimaryArtifact,
   validateManifestArtifacts,
 } from "../scripts/lib/update-artifacts.mjs";
 
@@ -37,6 +38,30 @@ test("parses an electron-builder manifest and preserves every file entry", () =>
   const manifest = parseUpdateManifest(manifestFor("Luma-0.1.5-x64-Setup.exe", content));
   assert.equal(manifest.version, "0.1.5");
   assert.deepEqual([...referencedArtifacts(manifest).keys()], ["Luma-0.1.5-x64-Setup.exe"]);
+  assert.equal(resolvePrimaryArtifact(manifest).name, "Luma-0.1.5-x64-Setup.exe");
+});
+
+test("rejects non-positive, partial, decimal, and unsafe artifact sizes", () => {
+  const content = Buffer.from("installer");
+  for (const size of ["0", "-1", "12junk", "12.5", "9007199254740992"]) {
+    assert.throws(
+      () => parseUpdateManifest(manifestFor("Luma.exe", content, { size })),
+      /size 必须是(?:安全的)?正整数/,
+    );
+  }
+});
+
+test("requires canonical 64-byte SHA-512 Base64 digests", () => {
+  const content = Buffer.from("installer");
+  const digest = sha512Base64(content);
+  const nonCanonicalPaddingBits = `${digest.slice(0, -3)}B==`;
+
+  for (const sha512 of ["not-base64", sha512Base64(content).slice(0, -2), nonCanonicalPaddingBits]) {
+    assert.throws(
+      () => parseUpdateManifest(manifestFor("Luma.exe", content, { sha512 })),
+      /规范的 SHA-512|64 字节/,
+    );
+  }
 });
 
 test("rejects absolute URLs and path traversal in update references", () => {
@@ -56,6 +81,30 @@ test("verifies referenced artifact size and sha512", async (context) => {
 
   const result = await validateManifestArtifacts(manifestPath, directory);
   assert.deepEqual(result.artifactNames, [name]);
+});
+
+test("requires path to identify a primary artifact during release validation", async (context) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "luma-update-test-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const name = "Luma-0.1.5-x64-Setup.exe";
+  const content = Buffer.from("installer");
+  const manifestPath = path.join(directory, "latest.yml");
+  const withoutPath = manifestFor(name, content).replace(`path: ${name}\n`, "");
+  await writeFile(path.join(directory, name), content);
+  await writeFile(manifestPath, withoutPath);
+
+  await assert.rejects(validateManifestArtifacts(manifestPath, directory), /缺少主产物 path/);
+});
+
+test("requires path and top-level sha512 to agree with the selected file", () => {
+  const content = Buffer.from("installer");
+  const manifest = parseUpdateManifest(manifestFor("Luma.exe", content));
+  manifest.path = "Other.exe";
+  assert.throws(() => resolvePrimaryArtifact(manifest), /path 未出现在 files\[\]/);
+
+  manifest.path = "Luma.exe";
+  manifest.sha512 = sha512Base64(Buffer.from("other"));
+  assert.throws(() => resolvePrimaryArtifact(manifest), /顶层 sha512 与主产物不一致/);
 });
 
 test("fails when a manifest references a missing or changed artifact", async (context) => {

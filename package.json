@@ -1,6 +1,6 @@
 {
   "name": "luma-wallpaper",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A calm image and video wallpaper manager for macOS, Windows, and the web.",
   "author": "Luma",
   "repository": {
@@ -57,6 +57,7 @@
   "build": {
     "appId": "com.luma.wallpaper",
     "productName": "Luma",
+    "afterPack": "scripts/build-native-macos-helper.mjs",
     "asar": true,
     "electronFuses": {
       "runAsNode": false,
@@ -94,6 +95,7 @@
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.lifestyle",
+      "artifactName": "Luma-${version}-${arch}-mac.${ext}",
       "publish": [
         {
           "provider": "github",

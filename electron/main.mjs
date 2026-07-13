@@ -25,6 +25,12 @@ import {
   downloadAndInstallUpdate,
   stopAutoUpdates,
 } from "./auto-update.mjs";
+import {
+  acknowledgeUnsignedMacUpdateLaunch,
+  recoverAbandonedUnsignedMacUpdate,
+  shouldExitForActiveUnsignedMacUpdate,
+} from "./unsigned-mac-update.mjs";
+import { resolveMacAppBundlePath } from "./update-support.mjs";
 import { attachWindowToWorkerW } from "./windows-workerw.mjs";
 import {
   shouldResumeWallpaperPlayback,
@@ -1307,12 +1313,35 @@ async function createMainWindow() {
 
 async function startApplication() {
   if (process.platform === "win32") app.setAppUserModelId("com.luma.wallpaper");
+  if (
+    await shouldExitForActiveUnsignedMacUpdate({
+      argv: process.argv,
+      userDataPath: app.getPath("userData"),
+    })
+  ) {
+    isQuitting = true;
+    app.quit();
+    return;
+  }
   configureSessionSecurity();
   registerMediaProtocol();
   registerIpc();
   registerDisplayLifecycle();
   await createWindowsTray();
   await createMainWindow();
+  const acknowledgedUpdate = await acknowledgeUnsignedMacUpdateLaunch({
+    argv: process.argv,
+    userDataPath: app.getPath("userData"),
+    currentVersion: app.getVersion(),
+    currentAppPath: resolveMacAppBundlePath(process.execPath),
+  });
+  if (!acknowledgedUpdate) {
+    await recoverAbandonedUnsignedMacUpdate({
+      argv: process.argv,
+      userDataPath: app.getPath("userData"),
+      currentAppPath: resolveMacAppBundlePath(process.execPath),
+    });
+  }
   initializeAutoUpdates({
     getMainWindow: () => mainWindow,
     beforeInstall: () => {

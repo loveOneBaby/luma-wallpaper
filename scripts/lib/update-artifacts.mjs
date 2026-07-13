@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
@@ -15,9 +16,25 @@ function parseScalar(rawValue) {
 }
 
 function parseInteger(rawValue, field, source) {
-  const value = Number.parseInt(parseScalar(rawValue), 10);
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${source}: ${field} 必须是非负整数`);
+  const scalar = parseScalar(rawValue);
+  if (!/^[1-9][0-9]*$/.test(scalar)) {
+    throw new Error(`${source}: ${field} 必须是正整数`);
+  }
+  const value = Number(scalar);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${source}: ${field} 必须是安全的正整数`);
+  }
+  return value;
+}
+
+export function validateSha512Base64(value, field, source = "update manifest") {
+  if (typeof value !== "string" || !/^[A-Za-z0-9+/]{86}==$/.test(value)) {
+    throw new Error(`${source}: ${field} 必须是规范的 SHA-512 Base64 摘要`);
+  }
+
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length !== 64 || decoded.toString("base64") !== value) {
+    throw new Error(`${source}: ${field} 必须解码为 64 字节的规范 SHA-512 摘要`);
   }
   return value;
 }
@@ -80,10 +97,12 @@ export function parseUpdateManifest(text, source = "update manifest") {
   for (const [index, file] of manifest.files.entries()) {
     if (!file.url) throw new Error(`${source}: files[${index}] 缺少 url`);
     if (!file.sha512) throw new Error(`${source}: files[${index}] 缺少 sha512`);
-    if (!Number.isSafeInteger(file.size)) {
+    validateSha512Base64(file.sha512, `files[${index}].sha512`, source);
+    if (!Number.isSafeInteger(file.size) || file.size <= 0) {
       throw new Error(`${source}: files[${index}] 缺少有效 size`);
     }
   }
+  if (manifest.sha512) validateSha512Base64(manifest.sha512, "sha512", source);
 
   return manifest;
 }
@@ -120,22 +139,43 @@ export function normalizeArtifactReference(reference, source = "update manifest"
   return decoded;
 }
 
-export function referencedArtifacts(manifest, source = "update manifest") {
+function collectArtifactEntries(manifest, source) {
   const entries = new Map();
   for (const file of manifest.files) {
     const name = normalizeArtifactReference(file.url, source);
     if (entries.has(name)) throw new Error(`${source}: 重复引用产物 ${name}`);
     entries.set(name, file);
   }
+  return entries;
+}
 
-  if (manifest.path) {
-    const primaryName = normalizeArtifactReference(manifest.path, source);
-    const primary = entries.get(primaryName);
-    if (!primary) throw new Error(`${source}: path 未出现在 files[] 中：${primaryName}`);
-    if (manifest.sha512 && manifest.sha512 !== primary.sha512) {
-      throw new Error(`${source}: 顶层 sha512 与主产物不一致`);
-    }
+function resolvePrimaryFromEntries(manifest, entries, source, required) {
+  if (!manifest.path) {
+    if (required) throw new Error(`${source}: 缺少主产物 path`);
+    return null;
   }
+
+  const name = normalizeArtifactReference(manifest.path, source);
+  const metadata = entries.get(name);
+  if (!metadata) throw new Error(`${source}: path 未出现在 files[] 中：${name}`);
+  if (manifest.sha512 && manifest.sha512 !== metadata.sha512) {
+    throw new Error(`${source}: 顶层 sha512 与主产物不一致`);
+  }
+  return { name, metadata };
+}
+
+export function resolvePrimaryArtifact(manifest, source = "update manifest") {
+  const entries = collectArtifactEntries(manifest, source);
+  return resolvePrimaryFromEntries(manifest, entries, source, true);
+}
+
+export function referencedArtifacts(
+  manifest,
+  source = "update manifest",
+  { requirePrimary = false } = {},
+) {
+  const entries = collectArtifactEntries(manifest, source);
+  resolvePrimaryFromEntries(manifest, entries, source, requirePrimary);
   return entries;
 }
 
@@ -153,7 +193,7 @@ export async function hashFile(filePath, algorithm, encoding = "hex") {
 export async function validateManifestArtifacts(manifestPath, artifactDirectory) {
   const source = path.basename(manifestPath);
   const manifest = parseUpdateManifest(await readFile(manifestPath, "utf8"), source);
-  const entries = referencedArtifacts(manifest, source);
+  const entries = referencedArtifacts(manifest, source, { requirePrimary: true });
 
   for (const [name, metadata] of entries) {
     const artifactPath = path.join(artifactDirectory, name);
