@@ -39,6 +39,10 @@ const api = Object.freeze({
   setOpenAtLogin: (openAtLogin) => ipcRenderer.invoke("luma:startup:set", openAtLogin === true),
   onUpdateState: (callback) => subscribe("luma:update-state", callback),
   onPlaybackError: (callback) => subscribe("luma:wallpaper-error", callback),
+  stopWallpaper: () => ipcRenderer.invoke("luma:wallpaper:stop"),
+  pauseWallpaper: () => ipcRenderer.invoke("luma:wallpaper:pause"),
+  resumeWallpaper: () => ipcRenderer.invoke("luma:wallpaper:resume"),
+  onWallpaperRuntime: (callback) => subscribe("luma:wallpaper:runtime", callback),
 });
 
 contextBridge.exposeInMainWorld("lumaDesktop", api);

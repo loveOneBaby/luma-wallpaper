@@ -1673,6 +1673,76 @@ button:focus-visible,
   backdrop-filter: none;
 }
 
+/* P0-1: "正在使用" badge + wallpaper running pill */
+
+.applied-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--glass-cyan, #6ff2ff);
+  box-shadow: 0 0 6px rgba(111, 242, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.applied-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #04303a;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(2, 50, 67, 0.18);
+}
+
+.media-stage .applied-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+}
+
+.media-tile.is-applied .media-tile-select {
+  box-shadow: 0 0 0 2px rgba(111, 242, 255, 0.6);
+}
+
+.wallpaper-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #04303a;
+}
+
+.wallpaper-running .status-action {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(111, 242, 255, 0.22);
+  color: #04303a;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.wallpaper-running .status-action:hover {
+  background: rgba(111, 242, 255, 0.38);
+}
+
+.wallpaper-running .status-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

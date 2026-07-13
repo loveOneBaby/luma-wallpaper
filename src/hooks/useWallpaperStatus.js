@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyDesktopWallpaper, subscribeWallpaperRuntime } from "../services/desktopWallpaper.js";
+import {
+  applyDesktopWallpaper,
+  pauseDesktopWallpaper,
+  resumeDesktopWallpaper,
+  stopDesktopWallpaper,
+  subscribeWallpaperRuntime,
+  subscribeWallpaperRuntimeState,
+} from "../services/desktopWallpaper.js";
 import {
   downloadAndInstallDesktopUpdate,
   getDesktopUpdateState,
@@ -25,6 +32,8 @@ export function useWallpaperStatus() {
   const [feedback, setFeedback] = useState(null);
   const [applyState, setApplyState] = useState("idle");
   const [hasWallpaperRecovery, setHasWallpaperRecovery] = useState(false);
+  const [wallpaperRuntime, setWallpaperRuntime] = useState({ status: "stopped" });
+  const [appliedMatchKey, setAppliedMatchKey] = useState(null);
   const [isConflictOpen, setConflictOpen] = useState(
     () =>
       import.meta.env.DEV &&
@@ -152,7 +161,14 @@ export function useWallpaperStatus() {
       try {
         const result = await applyDesktopWallpaper(request, { force });
         if (result.status === "conflict") setConflictOpen(true);
-        if (result.status === "success") setHasWallpaperRecovery(true);
+        if (result.status === "success") {
+          setHasWallpaperRecovery(true);
+          const matchKey = request.demoKey
+            ? `demo:${request.demoKey}`
+            : (request.filePath ?? null);
+          setAppliedMatchKey(matchKey);
+          setWallpaperRuntime({ status: "running", kind: request.kind, matchKey });
+        }
         showApplyStatus(result.status, result.message);
       } finally {
         applyInFlightRef.current = false;
@@ -270,6 +286,50 @@ export function useWallpaperStatus() {
     return () => unsubscribe?.();
   }, [showFeedback]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeWallpaperRuntimeState((state) => {
+      setWallpaperRuntime(state);
+      setAppliedMatchKey(state.status === "stopped" ? null : (state.matchKey ?? null));
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  const handleStopWallpaper = useCallback(async () => {
+    window.clearTimeout(statusTimerRef.current);
+    setFeedback({
+      tone: "applying",
+      source: "wallpaper",
+      message: "正在停止动态壁纸…",
+    });
+    try {
+      await stopDesktopWallpaper();
+      setAppliedMatchKey(null);
+      setHasWallpaperRecovery(false);
+      setWallpaperRuntime({ status: "stopped" });
+      showFeedback("success", "动态壁纸已停止", { source: "wallpaper" });
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : "无法停止动态壁纸", {
+        source: "wallpaper",
+      });
+    }
+  }, [showFeedback]);
+
+  const handlePauseWallpaper = useCallback(async () => {
+    try {
+      await pauseDesktopWallpaper();
+    } catch {
+      // Best-effort; the runtime-state event drives the UI.
+    }
+  }, []);
+
+  const handleResumeWallpaper = useCallback(async () => {
+    try {
+      await resumeDesktopWallpaper();
+    } catch {
+      // Best-effort; the runtime-state event drives the UI.
+    }
+  }, []);
+
   // Clear any pending toast timer on unmount.
   useEffect(
     () => () => {
@@ -288,6 +348,11 @@ export function useWallpaperStatus() {
     showUploadResult,
     handleApplyWallpaper,
     retryLastWallpaper,
+    wallpaperRuntime,
+    appliedMatchKey,
+    handleStopWallpaper,
+    handlePauseWallpaper,
+    handleResumeWallpaper,
     handleInstallUpdate,
     dismissUpdate,
   };

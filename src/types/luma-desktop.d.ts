@@ -95,6 +95,14 @@ export interface UpdateState {
     "developer-id" | "unverified" | "platform-managed" | "development" | "unsupported" | null;
 }
 
+export interface WallpaperRuntimeState {
+  status: "running" | "stopped" | "paused" | "error";
+  kind?: MediaKind | null;
+  matchKey?: string | null;
+  name?: string | null;
+  appliedAt?: string | null;
+}
+
 export interface LumaDesktopBridge {
   readonly isDesktop: true;
   readonly platform: string;
@@ -116,9 +124,10 @@ export interface LumaDesktopBridge {
   }>;
   onUpdateState(callback: (state: UpdateState) => void): () => void;
   onPlaybackError(callback: (error: { code: string; message: string }) => void): () => void;
-  onWallpaperRuntimeState?(
-    callback: (error: { code?: string; message?: string } | string) => void,
-  ): () => void;
+  stopWallpaper(): Promise<{ ok: boolean }>;
+  pauseWallpaper(): Promise<{ ok: boolean }>;
+  resumeWallpaper(): Promise<{ ok: boolean }>;
+  onWallpaperRuntime(callback: (state: WallpaperRuntimeState) => void): () => void;
 }
 
 export interface WallpaperMedia extends DesktopMediaFile {

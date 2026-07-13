@@ -529,6 +529,29 @@ async function rememberLastApplied(media) {
   }));
 }
 
+async function clearLastApplied() {
+  await updatePersistedState((current) => ({ ...current, lastApplied: null }));
+}
+
+async function publishLastAppliedRuntime() {
+  const persisted = await readPersistedState();
+  const lastApplied = persisted.lastApplied;
+  if (!lastApplied) {
+    publishWallpaperRuntime({ status: "stopped" });
+    return;
+  }
+  if (lastApplied.kind === "image") {
+    publishWallpaperRuntime({
+      status: "running",
+      kind: "image",
+      matchKey: lastApplied.demoKey ? `demo:${lastApplied.demoKey}` : (lastApplied.path ?? null),
+      name: null,
+      appliedAt: lastApplied.appliedAt ?? null,
+    });
+  }
+  // video restore is handled by restoreLastVideoWallpaper()
+}
+
 function resolveMediaRequest(request) {
   if (!request || typeof request !== "object") {
     throw new Error("缺少壁纸文件");
@@ -557,7 +580,7 @@ function resolveMediaRequest(request) {
   if (!isDemo && !authorizedMediaIdentities.has(identity)) {
     throw new Error("该文件尚未通过 Luma 的选择或拖放授权");
   }
-  return { ...mediaDescriptor(filePath), kind };
+  return { ...mediaDescriptor(filePath), kind, demoKey: request.demoKey ?? null };
 }
 
 function clearPlaybackTracking(token, result = null) {
@@ -587,6 +610,24 @@ function notifyWallpaperError(message, code = "PLAYBACK_FAILED") {
     code,
     message: safeText(message, "动态壁纸播放已中断", 240),
   });
+}
+
+function publishWallpaperRuntime(state) {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+  mainWindow.webContents.send("luma:wallpaper:runtime", state);
+}
+
+function runtimeStateFor(media, status) {
+  if (!media) {
+    return { status, kind: null, matchKey: null, name: null, appliedAt: null };
+  }
+  return {
+    status,
+    kind: media.kind ?? null,
+    matchKey: media.demoKey ? `demo:${media.demoKey}` : (media.path ?? null),
+    name: media.name ?? null,
+    appliedAt: new Date().toISOString(),
+  };
 }
 
 function sendWallpaperPlaybackControl(action, reason) {
@@ -1027,6 +1068,8 @@ function registerIpc() {
           console.warn("Unable to remember the last applied wallpaper", error);
         }
 
+        publishWallpaperRuntime(runtimeStateFor(media, "running"));
+
         return {
           ok: true,
           platform: process.platform,
@@ -1099,6 +1142,30 @@ function registerIpc() {
   ipcMain.handle("luma:wallpaper:get-media", (event) => {
     if (!wallpaperWindow || event.sender.id !== wallpaperWindow.webContents.id) return null;
     return wallpaperMedia;
+  });
+
+  ipcMain.handle("luma:wallpaper:stop", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口停止动态壁纸");
+    return enqueueWallpaperOperation(async () => {
+      destroyWallpaperWindow();
+      await clearLastApplied().catch(() => {});
+      publishWallpaperRuntime({ status: "stopped" });
+      return { ok: true };
+    });
+  });
+
+  ipcMain.handle("luma:wallpaper:pause", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口暂停动态壁纸");
+    sendWallpaperPlaybackControl("pause", "user");
+    if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "paused"));
+    return { ok: true };
+  });
+
+  ipcMain.handle("luma:wallpaper:resume", (event) => {
+    if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口恢复动态壁纸");
+    sendWallpaperPlaybackControl("resume", "user");
+    if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "running"));
+    return { ok: true };
   });
 }
 
@@ -1236,9 +1303,13 @@ function registerDisplayLifecycle() {
       if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
       displayRefreshTimer = null;
       sendWallpaperPlaybackControl("pause", eventName);
+      if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "paused"));
       return;
     }
     if (transition.refreshPlacement) scheduleWallpaperPlacementRefresh(eventName);
+    if (wallpaperMedia && !wallpaperPowerState.suspended) {
+      publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "running"));
+    }
   };
   powerMonitor.on("suspend", () => handlePowerEvent("suspend"));
   powerMonitor.on("lock-screen", () => handlePowerEvent("lock-screen"));
@@ -1260,10 +1331,12 @@ async function restoreLastVideoWallpaper() {
     });
     if (media.kind !== "video") throw new Error("上次使用的动态壁纸格式已不受支持");
     await enqueueWallpaperOperation(() => setVideoWallpaper(media));
+    publishWallpaperRuntime(runtimeStateFor(media, "running"));
   } catch (error) {
     console.error("Unable to restore the previous video wallpaper", error);
     notifyWallpaperError(dependencyMessage(error), "RESTORE_FAILED");
     await updatePersistedState((current) => ({ ...current, lastApplied: null })).catch(() => {});
+    publishWallpaperRuntime({ status: "stopped" });
   }
 }
 
@@ -1352,6 +1425,7 @@ async function startApplication() {
   restoreLastVideoWallpaper().catch((error) =>
     console.error("Unable to restore the video wallpaper", error),
   );
+  publishLastAppliedRuntime().catch(() => {});
 
   app.on("activate", showMainWindow);
 }

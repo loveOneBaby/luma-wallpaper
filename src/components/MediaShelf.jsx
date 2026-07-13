@@ -102,13 +102,20 @@ function LazyVideoPreview({ item }) {
 const MediaTile = memo(function MediaTile({
   item,
   isSelected,
+  isApplied = false,
   onSelect,
   onToggleFavorite,
   onRemove,
   disabled,
 }) {
   return (
-    <article className={`media-tile ${isSelected ? "is-selected" : ""}`}>
+    <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""}`}>
+      {isApplied ? (
+        <span className="applied-badge" aria-label="正在使用">
+          <span className="applied-dot" aria-hidden="true" />
+          正在使用
+        </span>
+      ) : null}
       <button
         className="media-tile-select"
         type="button"
@@ -179,6 +186,7 @@ export const MediaShelf = memo(function MediaShelf({
   onUpload,
   isReady = true,
   inert = false,
+  appliedMatchKey = null,
 }) {
   const tabRefs = useRef([]);
   const stripRef = useRef(null);
@@ -321,6 +329,10 @@ export const MediaShelf = memo(function MediaShelf({
               key={item.id}
               item={item}
               isSelected={selectedId === item.id}
+              isApplied={Boolean(
+                appliedMatchKey
+                  && ((item.demoKey ? `demo:${item.demoKey}` : item.filePath) === appliedMatchKey),
+              )}
               onSelect={onSelect}
               onToggleFavorite={onToggleFavorite}
               onRemove={onRemove}

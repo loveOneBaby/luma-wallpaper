@@ -2,6 +2,7 @@ export function MediaStage({
   media,
   videoRef,
   muted,
+  isApplied = false,
   onLoadedMetadata,
   onTimeUpdate,
   onPlay,
@@ -11,6 +12,12 @@ export function MediaStage({
 }) {
   return (
     <div className="media-stage" role="group" aria-label={`${media.name} 预览`}>
+      {isApplied ? (
+        <span className="applied-badge" aria-label="正在使用">
+          <span className="applied-dot" aria-hidden="true" />
+          正在使用
+        </span>
+      ) : null}
       {media.kind === "video" ? (
         <video
           key={media.src}

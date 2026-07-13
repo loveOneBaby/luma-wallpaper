@@ -34,6 +34,11 @@ export function App() {
     showUploadResult,
     handleApplyWallpaper,
     retryLastWallpaper,
+    wallpaperRuntime,
+    appliedMatchKey,
+    handleStopWallpaper,
+    handlePauseWallpaper,
+    handleResumeWallpaper,
     handleInstallUpdate,
     dismissUpdate,
   } = useWallpaperStatus();
@@ -137,6 +142,11 @@ export function App() {
         media={media}
         videoRef={videoRef}
         muted={muted}
+        isApplied={Boolean(
+          appliedMatchKey
+            && media
+            && ((media.demoKey ? `demo:${media.demoKey}` : media.filePath) === appliedMatchKey),
+        )}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onPlay={handlePlay}
@@ -182,7 +192,11 @@ export function App() {
         feedback={feedback}
         platform={platform}
         hasWallpaperRecovery={hasWallpaperRecovery}
+        wallpaperRuntime={wallpaperRuntime}
         onReportConflict={() => setConflictOpen(true)}
+        onStopWallpaper={handleStopWallpaper}
+        onPauseWallpaper={handlePauseWallpaper}
+        onResumeWallpaper={handleResumeWallpaper}
         onInstallUpdate={handleInstallUpdate}
         onDismissUpdate={dismissUpdate}
         inert={isFullscreen || isConflictOpen}
@@ -197,6 +211,7 @@ export function App() {
           items={items}
           selectedId={selectedId}
           activeCategory={activeCategory}
+          appliedMatchKey={appliedMatchKey}
           onCategoryChange={setActiveCategory}
           onSelect={setSelectedId}
           onToggleFavorite={toggleFavorite}

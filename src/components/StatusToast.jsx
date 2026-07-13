@@ -12,15 +12,67 @@ export function StatusToast({
   feedback,
   platform,
   hasWallpaperRecovery = false,
+  wallpaperRuntime = { status: "stopped" },
   onReportConflict,
+  onStopWallpaper,
+  onPauseWallpaper,
+  onResumeWallpaper,
   onInstallUpdate,
   onDismissUpdate,
   inert = false,
 }) {
   const isDesktop = platform === "darwin" || platform === "win32";
   const showPersistentRecovery = hasWallpaperRecovery && isDesktop;
+  const runtimeActive =
+    isDesktop && (wallpaperRuntime.status === "running" || wallpaperRuntime.status === "paused");
 
   if (!feedback?.message) {
+    if (runtimeActive) {
+      const isVideo = wallpaperRuntime.kind === "video";
+      const isPaused = wallpaperRuntime.status === "paused";
+      return (
+        <GlassSurface
+          {...GLASS_STATUS_TOAST}
+          className="wallpaper-running liquid-glass"
+          role="status"
+          aria-hidden={inert || undefined}
+          inert={inert}
+        >
+          <span className="applied-dot" aria-hidden="true" />
+          <span>{isVideo ? (isPaused ? "动态壁纸已暂停" : "动态壁纸运行中") : "桌面壁纸已设置"}</span>
+          {isVideo ? (
+            <>
+              <button
+                className="status-action"
+                type="button"
+                onClick={isPaused ? onResumeWallpaper : onPauseWallpaper}
+                disabled={inert}
+              >
+                {isPaused ? "继续" : "暂停"}
+              </button>
+              <button
+                className="status-action"
+                type="button"
+                onClick={onStopWallpaper}
+                disabled={inert}
+              >
+                停止
+              </button>
+            </>
+          ) : null}
+          {showPersistentRecovery ? (
+            <button
+              className="status-action"
+              type="button"
+              onClick={onReportConflict}
+              disabled={inert}
+            >
+              未生效？
+            </button>
+          ) : null}
+        </GlassSurface>
+      );
+    }
     if (!showPersistentRecovery) return null;
     return (
       <GlassSurface

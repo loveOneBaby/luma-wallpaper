@@ -27,8 +27,32 @@ export function subscribeWallpaperRuntime(callback) {
   const bridge = getBridge();
   if (typeof callback !== "function") return () => {};
   if (bridge?.onPlaybackError) return bridge.onPlaybackError(callback);
-  if (bridge?.onWallpaperRuntimeState) return bridge.onWallpaperRuntimeState(callback);
   return () => {};
+}
+
+export function subscribeWallpaperRuntimeState(callback) {
+  const bridge = getBridge();
+  if (typeof callback !== "function") return () => {};
+  if (bridge?.onWallpaperRuntime) return bridge.onWallpaperRuntime(callback);
+  return () => {};
+}
+
+export async function stopDesktopWallpaper() {
+  const bridge = getBridge();
+  if (!bridge?.stopWallpaper) return { ok: false };
+  return bridge.stopWallpaper();
+}
+
+export async function pauseDesktopWallpaper() {
+  const bridge = getBridge();
+  if (!bridge?.pauseWallpaper) return { ok: false };
+  return bridge.pauseWallpaper();
+}
+
+export async function resumeDesktopWallpaper() {
+  const bridge = getBridge();
+  if (!bridge?.resumeWallpaper) return { ok: false };
+  return bridge.resumeWallpaper();
 }
 
 export async function releaseDesktopMedia(paths) {
