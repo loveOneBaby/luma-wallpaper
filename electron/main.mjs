@@ -588,9 +588,9 @@ function notifyWallpaperError(message, code = "PLAYBACK_FAILED") {
   });
 }
 
-function publishWallpaperRuntime(state) {
+function publishWallpaperRuntime(runtimeState) {
   if (!state.mainWindow || state.mainWindow.isDestroyed() || state.mainWindow.webContents.isDestroyed()) return;
-  state.mainWindow.webContents.send("luma:wallpaper:runtime", state);
+  state.mainWindow.webContents.send("luma:wallpaper:runtime", runtimeState);
 }
 
 function runtimeStateFor(media, status) {
