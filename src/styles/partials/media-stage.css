@@ -1,0 +1,43 @@
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: #84dce4;
+}
+
+.media-stage,
+.wallpaper-media,
+.ambient-shade {
+  position: absolute;
+  inset: 0;
+}
+
+.media-stage {
+  overflow: hidden;
+  background: #8fdfe7;
+}
+
+.wallpaper-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: saturate(1.16) contrast(1.035);
+  transform: scale(1.08) translate(-2.8%, -3.5%);
+  user-select: none;
+}
+
+.wallpaper-image {
+  transform: scale(1.08) translate(-2.8%, -3.5%);
+}
+
+.ambient-shade {
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(3, 37, 52, 0.12) 0%, transparent 17%),
+    linear-gradient(0deg, rgba(0, 42, 55, 0.14) 0%, transparent 23%);
+}

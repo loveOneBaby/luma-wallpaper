@@ -1,0 +1,19 @@
+.file-name {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: calc(var(--dock-bottom) + var(--dock-height) + 17px);
+  max-width: min(520px, calc(100vw - 48px));
+  transform: translateX(-50%);
+  overflow: hidden;
+  color: rgba(249, 255, 255, 0.96);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 14px rgba(1, 40, 52, 0.34);
+  white-space: nowrap;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}

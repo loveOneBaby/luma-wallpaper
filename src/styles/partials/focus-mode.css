@@ -1,0 +1,32 @@
+.is-focus-mode .topbar,
+.is-focus-mode .file-name,
+.is-focus-mode .media-shelf,
+.is-focus-mode .status-toast,
+.is-focus-mode .wallpaper-recovery {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.is-focus-mode .topbar {
+  transform: translateY(-12px);
+}
+
+.is-focus-mode .file-name {
+  transform: translate(-50%, 10px);
+}
+
+.has-library-open .file-name {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+.is-focus-mode .control-dock {
+  opacity: 0;
+  transform: translate(-50%, 18px);
+}
+
+.is-focus-mode .control-dock:hover,
+.is-focus-mode:focus-within .control-dock {
+  opacity: 1;
+  transform: translateX(-50%);
+}

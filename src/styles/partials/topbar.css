@@ -1,0 +1,56 @@
+.topbar {
+  position: absolute;
+  z-index: 4;
+  inset: 0 0 auto;
+  height: 104px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 26px 32px 0;
+  color: rgba(250, 255, 255, 0.96);
+  text-shadow: 0 2px 16px rgba(2, 38, 50, 0.18);
+  pointer-events: none;
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
+}
+
+.brand {
+  padding-top: 2px;
+  font-size: clamp(25px, 2vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.25vw, 20px);
+  pointer-events: auto;
+}
+
+.platforms {
+  white-space: nowrap;
+  padding-top: 1px;
+  font-size: clamp(14px, 1.18vw, 17px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #04303a;
+  cursor: pointer;
+}
+
+.update-pill:hover {
+  filter: brightness(1.05);
+}

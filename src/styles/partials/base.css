@@ -1,0 +1,47 @@
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+
+:root {
+  color: #092a34;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #092a34;
+  --ice-white: #f4fdff;
+  --glass-cyan: rgba(188, 245, 247, 0.35);
+  --glass-white: rgba(255, 255, 255, 0.24);
+  --cyan-glow: rgba(112, 244, 255, 0.54);
+  --pink-glow: rgba(255, 146, 224, 0.5);
+  --dock-height: clamp(94px, 10.3vh, 108px);
+  --dock-bottom: clamp(52px, 8.6vh, 90px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #78dce5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}

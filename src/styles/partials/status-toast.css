@@ -1,0 +1,205 @@
+.status-toast {
+  position: absolute;
+  z-index: 8;
+  top: 104px;
+  left: 50%;
+  min-height: 48px;
+  max-width: min(560px, calc(100vw - 32px));
+  width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 18px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  animation: toast-arrive 220ms ease both;
+}
+
+.wallpaper-recovery {
+  position: absolute;
+  z-index: 8;
+  top: 104px;
+  left: 50%;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  color: rgba(9, 42, 52, 0.86);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: toast-arrive 220ms ease both;
+}
+
+.wallpaper-recovery > .glass-surface__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wallpaper-recovery:hover {
+  color: var(--ink);
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.status-toast > .glass-surface__content {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+}
+
+.status-toast > .glass-surface__content > span {
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.status-toast.is-success {
+  color: #075d4f;
+}
+
+.status-toast.is-info,
+.status-toast.is-updating {
+  color: #075263;
+}
+
+.status-toast.is-warning {
+  color: #70501b;
+}
+
+.status-toast.is-error,
+.status-toast.is-unsupported,
+.status-toast.is-conflict {
+  color: #703050;
+}
+
+.status-toast.is-applying > .glass-surface__content > svg,
+.status-toast.is-installing > .glass-surface__content > svg,
+.apply-button.is-applying svg,
+.conflict-retry:disabled svg {
+  animation: spin 850ms linear infinite;
+}
+
+.status-action {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.34);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-action:hover {
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.status-update {
+  min-height: 32px;
+  padding-inline: 13px;
+  color: #f5feff;
+  border-color: rgba(7, 70, 82, 0.34);
+  background: rgba(7, 70, 82, 0.82);
+}
+
+.status-update:hover {
+  background: rgba(7, 70, 82, 0.94);
+}
+
+.status-dismiss {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(9, 42, 52, 0.72);
+  background: transparent;
+  cursor: pointer;
+}
+
+.status-dismiss:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+/* P0-1: "正在使用" badge + wallpaper running pill */
+
+.applied-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--glass-cyan, #6ff2ff);
+  box-shadow: 0 0 6px rgba(111, 242, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.applied-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #04303a;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(2, 50, 67, 0.18);
+}
+
+.media-stage .applied-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+}
+
+.media-tile.is-applied .media-tile-select {
+  box-shadow: 0 0 0 2px rgba(111, 242, 255, 0.6);
+}
+
+.wallpaper-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #04303a;
+}
+
+.wallpaper-running .status-action {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(111, 242, 255, 0.22);
+  color: #04303a;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.wallpaper-running .status-action:hover {
+  background: rgba(111, 242, 255, 0.38);
+}
+
+.wallpaper-running .status-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
