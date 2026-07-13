@@ -41,34 +41,8 @@ import {
   VIDEO_EXTENSIONS,
   kindFromExtension,
 } from "../shared/mediaExtensions.js";
+import { state, consts, __dirname, appRoot } from "./app-state.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const appRoot = path.resolve(__dirname, "..");
-
-// Wallpaper verification polling. Tried in order; once a match is seen, the
-// stability delay re-checks to catch wallpaper utilities that immediately
-// reclaim the desktop.
-const VERIFICATION_DELAYS_MS = [120, 350, 700];
-const VERIFICATION_STABILITY_DELAY_MS = 1200;
-const PLAYBACK_TIMEOUT_MS = 4000;
-const MAX_DROPPED_PATHS = 100;
-const MAX_LIBRARY_ITEMS = 1000;
-const LIBRARY_STATE_VERSION = 1;
-const DISPLAY_REFRESH_DELAY_MS = 650;
-const MAIN_WINDOW_BOUNDS = {
-  width: 1280,
-  height: 820,
-  minWidth: 900,
-  minHeight: 620,
-};
-const DEMO_FILES_BY_KEY = new Map([
-  ["ocean-morning-video", "ocean-morning.mp4"],
-  ["ocean-morning-image", "ocean-morning.png"],
-]);
-const mediaFilesByToken = new Map();
-const mediaTokensByPath = new Map();
-const authorizedMediaIdentities = new Set();
-const deferredMediaReleaseIdentities = new Set();
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -86,21 +60,6 @@ if (hasSingleInstanceLock) {
   ]);
 }
 
-let mainWindow = null;
-let wallpaperWindow = null;
-let wallpaperMedia = null;
-let wallpaperModulePromise = null;
-let tray = null;
-let isQuitting = false;
-let displayRefreshTimer = null;
-let persistedStateCache = null;
-let stateWriteQueue = Promise.resolve();
-let wallpaperOperationQueue = Promise.resolve();
-let wallpaperTransitionInProgress = false;
-let wallpaperPowerState = { sleeping: false, locked: false, suspended: false };
-const playbackWaiters = new Map();
-const confirmedPlaybackTokens = new Set();
-const reportedPlaybackErrors = new Set();
 
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -138,17 +97,17 @@ function sameFilePath(leftPath, rightPath) {
   return comparablePath(leftPath) === comparablePath(rightPath);
 }
 
-function waitForPlayback(token, timeout = PLAYBACK_TIMEOUT_MS) {
+function waitForPlayback(token, timeout = consts.PLAYBACK_TIMEOUT_MS) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      playbackWaiters.delete(token);
+      state.playbackWaiters.delete(token);
       resolve({ status: "timeout" });
     }, timeout);
 
-    playbackWaiters.set(token, {
+    state.playbackWaiters.set(token, {
       resolve: (result) => {
         clearTimeout(timer);
-        playbackWaiters.delete(token);
+        state.playbackWaiters.delete(token);
         resolve(result);
       },
     });
@@ -156,12 +115,12 @@ function waitForPlayback(token, timeout = PLAYBACK_TIMEOUT_MS) {
 }
 
 function settlePlayback(token, result) {
-  playbackWaiters.get(token)?.resolve(result);
+  state.playbackWaiters.get(token)?.resolve(result);
 }
 
 async function loadWallpaperModule() {
-  wallpaperModulePromise ??= import("wallpaper");
-  return wallpaperModulePromise;
+  state.wallpaperModulePromise ??= import("wallpaper");
+  return state.wallpaperModulePromise;
 }
 
 function mediaKind(filePath) {
@@ -176,8 +135,8 @@ function authorizeMediaFile(filePath) {
 
   const identity = comparablePath(resolvedPath);
   if (!identity) throw new Error("无法识别媒体文件");
-  authorizedMediaIdentities.add(identity);
-  deferredMediaReleaseIdentities.delete(identity);
+  state.authorizedMediaIdentities.add(identity);
+  state.deferredMediaReleaseIdentities.delete(identity);
   return resolvedPath;
 }
 
@@ -201,11 +160,11 @@ function authorizePersistedMedia(state) {
 
 function mediaUrl(filePath) {
   const identity = comparablePath(filePath);
-  let token = mediaTokensByPath.get(identity);
+  let token = state.mediaTokensByPath.get(identity);
   if (!token) {
     token = crypto.randomUUID();
-    mediaTokensByPath.set(identity, token);
-    mediaFilesByToken.set(token, { identity, path: filePath });
+    state.mediaTokensByPath.set(identity, token);
+    state.mediaFilesByToken.set(token, { identity, path: filePath });
   }
 
   return `luma-media://local/${token}/${encodeURIComponent(path.basename(filePath))}`;
@@ -223,7 +182,7 @@ function mediaDescriptor(filePath) {
 
 function isMainWindowSender(event) {
   return Boolean(
-    mainWindow && !mainWindow.isDestroyed() && event?.sender?.id === mainWindow.webContents.id,
+    state.mainWindow && !state.mainWindow.isDestroyed() && event?.sender?.id === state.mainWindow.webContents.id,
   );
 }
 
@@ -231,13 +190,13 @@ function registerMediaProtocol() {
   protocol.handle("luma-media", (request) => {
     const requestUrl = new URL(request.url);
     const [, token] = requestUrl.pathname.split("/");
-    const mediaEntry = mediaFilesByToken.get(token);
+    const mediaEntry = state.mediaFilesByToken.get(token);
     const filePath = mediaEntry?.path;
 
     if (!filePath || !fs.existsSync(filePath) || !mediaKind(filePath)) {
       if (mediaEntry) {
-        mediaFilesByToken.delete(token);
-        mediaTokensByPath.delete(mediaEntry.identity);
+        state.mediaFilesByToken.delete(token);
+        state.mediaTokensByPath.delete(mediaEntry.identity);
       }
       return new Response("Media not found", { status: 404 });
     }
@@ -247,41 +206,41 @@ function registerMediaProtocol() {
 }
 
 function releaseMediaTokens(requestedPaths) {
-  const activeIdentity = comparablePath(wallpaperMedia?.path);
+  const activeIdentity = comparablePath(state.wallpaperMedia?.path);
   let released = 0;
   for (const requestedPath of Array.isArray(requestedPaths) ? requestedPaths : []) {
     const identity = comparablePath(requestedPath);
     if (!identity) continue;
     if (identity === activeIdentity) {
-      deferredMediaReleaseIdentities.add(identity);
+      state.deferredMediaReleaseIdentities.add(identity);
       continue;
     }
-    const token = mediaTokensByPath.get(identity);
+    const token = state.mediaTokensByPath.get(identity);
     if (!token) continue;
-    mediaTokensByPath.delete(identity);
-    mediaFilesByToken.delete(token);
+    state.mediaTokensByPath.delete(identity);
+    state.mediaFilesByToken.delete(token);
     released += 1;
   }
   return released;
 }
 
 function flushDeferredMediaTokenReleases() {
-  const activeIdentity = comparablePath(wallpaperMedia?.path);
+  const activeIdentity = comparablePath(state.wallpaperMedia?.path);
   let released = 0;
-  for (const identity of [...deferredMediaReleaseIdentities]) {
+  for (const identity of [...state.deferredMediaReleaseIdentities]) {
     if (identity === activeIdentity) continue;
-    deferredMediaReleaseIdentities.delete(identity);
-    const token = mediaTokensByPath.get(identity);
+    state.deferredMediaReleaseIdentities.delete(identity);
+    const token = state.mediaTokensByPath.get(identity);
     if (!token) continue;
-    mediaTokensByPath.delete(identity);
-    mediaFilesByToken.delete(token);
+    state.mediaTokensByPath.delete(identity);
+    state.mediaFilesByToken.delete(token);
     released += 1;
   }
   return released;
 }
 
 function findDemoMedia(demoKey) {
-  const fileName = DEMO_FILES_BY_KEY.get(String(demoKey ?? ""));
+  const fileName = consts.DEMO_FILES_BY_KEY.get(String(demoKey ?? ""));
   if (!fileName) return null;
 
   // Two supported flows: a packaged app resolves demo media from the
@@ -309,23 +268,23 @@ function safeText(value, fallback = "", maxLength = 240) {
 
 function emptyPersistedState() {
   return {
-    version: LIBRARY_STATE_VERSION,
+    version: consts.LIBRARY_STATE_VERSION,
     library: { items: [], selectedId: null, activeCategory: "all" },
     lastApplied: null,
   };
 }
 
 async function readPersistedState() {
-  if (persistedStateCache) return persistedStateCache;
+  if (state.persistedStateCache) return state.persistedStateCache;
 
   try {
     const content = await fsPromises.readFile(libraryStatePath(), "utf8");
     const parsed = JSON.parse(content);
     if (!parsed || typeof parsed !== "object") throw new Error("状态文件格式无效");
-    persistedStateCache = {
+    state.persistedStateCache = {
       ...emptyPersistedState(),
       ...parsed,
-      version: LIBRARY_STATE_VERSION,
+      version: consts.LIBRARY_STATE_VERSION,
       library:
         parsed.library && typeof parsed.library === "object"
           ? parsed.library
@@ -333,12 +292,12 @@ async function readPersistedState() {
     };
   } catch (error) {
     if (error?.code !== "ENOENT") console.warn("Unable to read saved library state", error);
-    persistedStateCache = emptyPersistedState();
+    state.persistedStateCache = emptyPersistedState();
   }
 
-  authorizePersistedMedia(persistedStateCache);
+  authorizePersistedMedia(state.persistedStateCache);
 
-  return persistedStateCache;
+  return state.persistedStateCache;
 }
 
 async function writePersistedState(nextState) {
@@ -354,29 +313,29 @@ async function writePersistedState(nextState) {
   } finally {
     await fsPromises.rm(temporaryPath, { force: true }).catch(() => {});
   }
-  persistedStateCache = nextState;
+  state.persistedStateCache = nextState;
 }
 
 function updatePersistedState(mutator) {
-  const operation = stateWriteQueue.then(async () => {
+  const operation = state.stateWriteQueue.then(async () => {
     const current = await readPersistedState();
     const next = await mutator(structuredClone(current));
     await writePersistedState(next);
     return next;
   });
-  stateWriteQueue = operation.catch(() => {});
+  state.stateWriteQueue = operation.catch(() => {});
   return operation;
 }
 
 function enqueueWallpaperOperation(operation) {
-  const queuedOperation = wallpaperOperationQueue.then(operation, operation);
-  wallpaperOperationQueue = queuedOperation.catch(() => {});
+  const queuedOperation = state.wallpaperOperationQueue.then(operation, operation);
+  state.wallpaperOperationQueue = queuedOperation.catch(() => {});
   return queuedOperation;
 }
 
 function sanitizeLibraryForStorage(request, { allowedIdentities = null } = {}) {
   const requestedItems = Array.isArray(request?.items)
-    ? request.items.slice(0, MAX_LIBRARY_ITEMS)
+    ? request.items.slice(0, consts.MAX_LIBRARY_ITEMS)
     : [];
   const storedItems = [];
   const seenIds = new Set();
@@ -388,7 +347,7 @@ function sanitizeLibraryForStorage(request, { allowedIdentities = null } = {}) {
     if (seenIds.has(id)) id = crypto.randomUUID();
 
     const demoKey = safeText(item.demoKey, "", 120);
-    if (item.isDemo === true && DEMO_FILES_BY_KEY.has(demoKey)) {
+    if (item.isDemo === true && consts.DEMO_FILES_BY_KEY.has(demoKey)) {
       const sourceKey = `demo:${demoKey}`;
       if (seenSources.has(sourceKey)) continue;
       const demoPath = findDemoMedia(demoKey);
@@ -495,7 +454,7 @@ function hydrateLibraryState(storedLibrary) {
     ? sanitized.selectedId
     : (items[0]?.id ?? null);
   return {
-    version: LIBRARY_STATE_VERSION,
+    version: consts.LIBRARY_STATE_VERSION,
     items,
     selectedId,
     activeCategory: sanitized.activeCategory,
@@ -503,7 +462,7 @@ function hydrateLibraryState(storedLibrary) {
 }
 
 async function loadLibraryState() {
-  await stateWriteQueue;
+  await state.stateWriteQueue;
   const persisted = await readPersistedState();
   const hydrated = hydrateLibraryState(persisted.library);
   const cleanedLibrary = sanitizeLibraryForStorage(hydrated);
@@ -514,24 +473,24 @@ async function loadLibraryState() {
 }
 
 async function saveLibraryState(request) {
-  await stateWriteQueue;
+  await state.stateWriteQueue;
   await readPersistedState();
   const library = sanitizeLibraryForStorage(request, {
-    allowedIdentities: authorizedMediaIdentities,
+    allowedIdentities: state.authorizedMediaIdentities,
   });
   for (const item of library.items) {
-    if (item.filePath) deferredMediaReleaseIdentities.delete(comparablePath(item.filePath));
+    if (item.filePath) state.deferredMediaReleaseIdentities.delete(comparablePath(item.filePath));
   }
   await updatePersistedState((current) => ({
     ...current,
-    version: LIBRARY_STATE_VERSION,
+    version: consts.LIBRARY_STATE_VERSION,
     library,
   }));
   return { ok: true, saved: library.items.length };
 }
 
 async function rememberLastApplied(media) {
-  const demoKey = [...DEMO_FILES_BY_KEY.keys()].find((key) => {
+  const demoKey = [...consts.DEMO_FILES_BY_KEY.keys()].find((key) => {
     const demoPath = findDemoMedia(key);
     return demoPath ? sameFilePath(demoPath, media.path) : false;
   });
@@ -594,7 +553,7 @@ function resolveMediaRequest(request) {
   const kind = mediaKind(filePath);
   if (!kind) throw new Error("仅支持图片或视频文件");
   const identity = comparablePath(filePath);
-  if (!isDemo && !authorizedMediaIdentities.has(identity)) {
+  if (!isDemo && !state.authorizedMediaIdentities.has(identity)) {
     throw new Error("该文件尚未通过 Luma 的选择或拖放授权");
   }
   return { ...mediaDescriptor(filePath), kind, demoKey: request.demoKey ?? null };
@@ -603,16 +562,16 @@ function resolveMediaRequest(request) {
 function clearPlaybackTracking(token, result = null) {
   if (!token) return;
   settlePlayback(token, result ?? { status: "error", message: "动态壁纸播放请求已取消" });
-  playbackWaiters.delete(token);
-  confirmedPlaybackTokens.delete(token);
-  reportedPlaybackErrors.delete(token);
+  state.playbackWaiters.delete(token);
+  state.confirmedPlaybackTokens.delete(token);
+  state.reportedPlaybackErrors.delete(token);
 }
 
 function destroyWallpaperWindow({ flushDeferred = true } = {}) {
-  const windowToDestroy = wallpaperWindow;
-  const playbackToken = wallpaperMedia?.playbackToken;
-  wallpaperWindow = null;
-  wallpaperMedia = null;
+  const windowToDestroy = state.wallpaperWindow;
+  const playbackToken = state.wallpaperMedia?.playbackToken;
+  state.wallpaperWindow = null;
+  state.wallpaperMedia = null;
   clearPlaybackTracking(playbackToken, {
     status: "error",
     message: "动态壁纸窗口已关闭",
@@ -622,16 +581,16 @@ function destroyWallpaperWindow({ flushDeferred = true } = {}) {
 }
 
 function notifyWallpaperError(message, code = "PLAYBACK_FAILED") {
-  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
-  mainWindow.webContents.send("luma:wallpaper-error", {
+  if (!state.mainWindow || state.mainWindow.isDestroyed() || state.mainWindow.webContents.isDestroyed()) return;
+  state.mainWindow.webContents.send("luma:wallpaper-error", {
     code,
     message: safeText(message, "动态壁纸播放已中断", 240),
   });
 }
 
 function publishWallpaperRuntime(state) {
-  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
-  mainWindow.webContents.send("luma:wallpaper:runtime", state);
+  if (!state.mainWindow || state.mainWindow.isDestroyed() || state.mainWindow.webContents.isDestroyed()) return;
+  state.mainWindow.webContents.send("luma:wallpaper:runtime", state);
 }
 
 function runtimeStateFor(media, status) {
@@ -649,46 +608,46 @@ function runtimeStateFor(media, status) {
 
 function sendWallpaperPlaybackControl(action, reason) {
   if (
-    !wallpaperWindow ||
-    wallpaperWindow.isDestroyed() ||
-    wallpaperWindow.webContents.isDestroyed()
+    !state.wallpaperWindow ||
+    state.wallpaperWindow.isDestroyed() ||
+    state.wallpaperWindow.webContents.isDestroyed()
   ) {
     return;
   }
-  wallpaperWindow.webContents.send("luma:wallpaper:playback-control", { action, reason });
+  state.wallpaperWindow.webContents.send("luma:wallpaper:playback-control", { action, reason });
 }
 
 async function refreshWallpaperPlacement(reason = "display-change") {
-  if (!wallpaperWindow || wallpaperWindow.isDestroyed() || wallpaperMedia?.kind !== "video") return;
+  if (!state.wallpaperWindow || state.wallpaperWindow.isDestroyed() || state.wallpaperMedia?.kind !== "video") return;
   try {
     const bounds = screen.getPrimaryDisplay().bounds;
-    if (!wallpaperWindow || wallpaperWindow.isDestroyed()) return;
-    wallpaperWindow.setBounds(bounds, false);
+    if (!state.wallpaperWindow || state.wallpaperWindow.isDestroyed()) return;
+    state.wallpaperWindow.setBounds(bounds, false);
     if (process.platform === "win32") {
-      await attachWindowToWorkerW(wallpaperWindow, bounds);
+      await attachWindowToWorkerW(state.wallpaperWindow, bounds);
     } else {
-      wallpaperWindow.showInactive();
+      state.wallpaperWindow.showInactive();
     }
   } catch (error) {
     console.error(`Unable to restore wallpaper placement after ${reason}`, error);
-    if (!isQuitting) notifyWallpaperError(dependencyMessage(error), "DESKTOP_LAYER_FAILED");
+    if (!state.isQuitting) notifyWallpaperError(dependencyMessage(error), "DESKTOP_LAYER_FAILED");
   }
 }
 
-function scheduleWallpaperPlacementRefresh(reason, delay = DISPLAY_REFRESH_DELAY_MS) {
-  if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
-  displayRefreshTimer = setTimeout(() => {
-    displayRefreshTimer = null;
-    if (wallpaperPowerState.suspended) return;
+function scheduleWallpaperPlacementRefresh(reason, delay = consts.DISPLAY_REFRESH_DELAY_MS) {
+  if (state.displayRefreshTimer) clearTimeout(state.displayRefreshTimer);
+  state.displayRefreshTimer = setTimeout(() => {
+    state.displayRefreshTimer = null;
+    if (state.wallpaperPowerState.suspended) return;
     refreshWallpaperPlacement(reason)
       .then(() => {
-        if (shouldResumeWallpaperPlayback(wallpaperPowerState)) {
+        if (shouldResumeWallpaperPlayback(state.wallpaperPowerState)) {
           sendWallpaperPlaybackControl("resume", reason);
         }
       })
       .catch((error) => console.error(error));
   }, delay);
-  displayRefreshTimer.unref?.();
+  state.displayRefreshTimer.unref?.();
 }
 
 async function setImageWallpaper(media) {
@@ -749,7 +708,7 @@ async function setImageWallpaper(media) {
   try {
     let firstMatch = false;
     let sawMismatch = false;
-    for (const delay of VERIFICATION_DELAYS_MS) {
+    for (const delay of consts.VERIFICATION_DELAYS_MS) {
       await wait(delay);
       const check = await readVerification();
       if (check.status === "match") {
@@ -769,7 +728,7 @@ async function setImageWallpaper(media) {
     }
 
     // A second check catches wallpaper utilities that immediately reclaim the desktop.
-    await wait(VERIFICATION_STABILITY_DELAY_MS);
+    await wait(consts.VERIFICATION_STABILITY_DELAY_MS);
     const stableCheck = await readVerification();
     if (stableCheck.status === "match") {
       return { verified: true, verification: "verified", code: "OK" };
@@ -810,7 +769,7 @@ function createWallpaperWindow(bounds) {
     },
   });
 
-  wallpaperWindow = nextWindow;
+  state.wallpaperWindow = nextWindow;
   hardenWindowNavigation(nextWindow, pathToFileURL(path.join(__dirname, "wallpaper.html")).href);
   nextWindow.setIgnoreMouseEvents(true, { forward: true });
   nextWindow.setMenuBarVisibility(false);
@@ -821,23 +780,23 @@ function createWallpaperWindow(bounds) {
   }
 
   nextWindow.on("closed", () => {
-    if (wallpaperWindow === nextWindow) {
-      const closedToken = wallpaperMedia?.playbackToken;
-      const wasPlaying = confirmedPlaybackTokens.has(closedToken);
-      wallpaperWindow = null;
-      wallpaperMedia = null;
+    if (state.wallpaperWindow === nextWindow) {
+      const closedToken = state.wallpaperMedia?.playbackToken;
+      const wasPlaying = state.confirmedPlaybackTokens.has(closedToken);
+      state.wallpaperWindow = null;
+      state.wallpaperMedia = null;
       if (closedToken) {
         settlePlayback(closedToken, {
           status: "error",
           message: "动态壁纸窗口意外关闭",
         });
-        if (!isQuitting && wasPlaying && !reportedPlaybackErrors.has(closedToken)) {
-          reportedPlaybackErrors.add(closedToken);
+        if (!state.isQuitting && wasPlaying && !state.reportedPlaybackErrors.has(closedToken)) {
+          state.reportedPlaybackErrors.add(closedToken);
           notifyWallpaperError("动态壁纸窗口意外关闭", "WALLPAPER_WINDOW_CLOSED");
         }
         clearPlaybackTracking(closedToken);
       }
-      if (!wallpaperTransitionInProgress) flushDeferredMediaTokenReleases();
+      if (!state.wallpaperTransitionInProgress) flushDeferredMediaTokenReleases();
     }
   });
 
@@ -848,15 +807,15 @@ async function activateVideoWallpaper(media, playbackToken) {
   const playbackResultPromise = waitForPlayback(playbackToken);
   const nextMedia = { ...media, playbackToken };
   const bounds = screen.getPrimaryDisplay().bounds;
-  let nextWindow = wallpaperWindow;
+  let nextWindow = state.wallpaperWindow;
   let createdWindow = false;
 
   if (!nextWindow || nextWindow.isDestroyed()) {
     nextWindow = createWallpaperWindow(bounds);
     createdWindow = true;
   }
-  wallpaperWindow = nextWindow;
-  wallpaperMedia = nextMedia;
+  state.wallpaperWindow = nextWindow;
+  state.wallpaperMedia = nextMedia;
 
   try {
     if (createdWindow) {
@@ -878,7 +837,7 @@ async function activateVideoWallpaper(media, playbackToken) {
           (playbackResult.status === "timeout" ? "动态壁纸播放确认超时" : "动态壁纸无法播放"),
       );
     }
-    if (wallpaperPowerState.suspended) {
+    if (state.wallpaperPowerState.suspended) {
       sendWallpaperPlaybackControl("pause", "system-suspended");
     }
     return { verified: true, verification: "playing", code: "OK" };
@@ -889,12 +848,12 @@ async function activateVideoWallpaper(media, playbackToken) {
 }
 
 async function setVideoWallpaper(media, { force = false } = {}) {
-  wallpaperTransitionInProgress = true;
+  state.wallpaperTransitionInProgress = true;
   try {
-    const previousPlaybackToken = wallpaperMedia?.playbackToken;
+    const previousPlaybackToken = state.wallpaperMedia?.playbackToken;
     const previousMedia =
-      previousPlaybackToken && confirmedPlaybackTokens.has(previousPlaybackToken)
-        ? { ...wallpaperMedia }
+      previousPlaybackToken && state.confirmedPlaybackTokens.has(previousPlaybackToken)
+        ? { ...state.wallpaperMedia }
         : null;
 
     if (previousPlaybackToken) {
@@ -930,7 +889,7 @@ async function setVideoWallpaper(media, { force = false } = {}) {
       throw error;
     }
   } finally {
-    wallpaperTransitionInProgress = false;
+    state.wallpaperTransitionInProgress = false;
     flushDeferredMediaTokenReleases();
   }
 }
@@ -948,21 +907,21 @@ function dependencyMessage(error) {
 
 function registerIpc() {
   ipcMain.on("luma:wallpaper:playback-state", (event, payload) => {
-    if (!wallpaperWindow || event.sender.id !== wallpaperWindow.webContents.id) return;
-    if (!payload || payload.token !== wallpaperMedia?.playbackToken) return;
+    if (!state.wallpaperWindow || event.sender.id !== state.wallpaperWindow.webContents.id) return;
+    if (!payload || payload.token !== state.wallpaperMedia?.playbackToken) return;
     if (payload.status !== "playing" && payload.status !== "error") return;
 
-    if (payload.status === "playing") confirmedPlaybackTokens.add(payload.token);
+    if (payload.status === "playing") state.confirmedPlaybackTokens.add(payload.token);
     settlePlayback(payload.token, {
       status: payload.status,
       message: typeof payload.message === "string" ? payload.message : undefined,
     });
     if (
       payload.status === "error" &&
-      confirmedPlaybackTokens.has(payload.token) &&
-      !reportedPlaybackErrors.has(payload.token)
+      state.confirmedPlaybackTokens.has(payload.token) &&
+      !state.reportedPlaybackErrors.has(payload.token)
     ) {
-      reportedPlaybackErrors.add(payload.token);
+      state.reportedPlaybackErrors.add(payload.token);
       notifyWallpaperError(payload.message, "PLAYBACK_INTERRUPTED");
     }
   });
@@ -983,8 +942,8 @@ function registerIpc() {
       ],
     };
 
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, options)
+    const result = state.mainWindow
+      ? await dialog.showOpenDialog(state.mainWindow, options)
       : await dialog.showOpenDialog(options);
     return {
       canceled: result.canceled,
@@ -1013,7 +972,7 @@ function registerIpc() {
     const total = Number.isFinite(payload?.total)
       ? Math.max(0, Math.floor(payload.total))
       : requestedPaths.length;
-    const limitedPaths = requestedPaths.slice(0, MAX_DROPPED_PATHS);
+    const limitedPaths = requestedPaths.slice(0, consts.MAX_DROPPED_PATHS);
     const seen = new Set();
     const files = [];
     let duplicateCount = 0;
@@ -1071,7 +1030,7 @@ function registerIpc() {
 
     return enqueueWallpaperOperation(async () => {
       try {
-        await stateWriteQueue;
+        await state.stateWriteQueue;
         await readPersistedState();
         const media = resolveMediaRequest(request);
         const result =
@@ -1157,8 +1116,8 @@ function registerIpc() {
   });
 
   ipcMain.handle("luma:wallpaper:get-media", (event) => {
-    if (!wallpaperWindow || event.sender.id !== wallpaperWindow.webContents.id) return null;
-    return wallpaperMedia;
+    if (!state.wallpaperWindow || event.sender.id !== state.wallpaperWindow.webContents.id) return null;
+    return state.wallpaperMedia;
   });
 
   ipcMain.handle("luma:wallpaper:stop", (event) => {
@@ -1174,14 +1133,14 @@ function registerIpc() {
   ipcMain.handle("luma:wallpaper:pause", (event) => {
     if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口暂停动态壁纸");
     sendWallpaperPlaybackControl("pause", "user");
-    if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "paused"));
+    if (state.wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "paused"));
     return { ok: true };
   });
 
   ipcMain.handle("luma:wallpaper:resume", (event) => {
     if (!isMainWindowSender(event)) throw new Error("不允许从当前窗口恢复动态壁纸");
     sendWallpaperPlaybackControl("resume", "user");
-    if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "running"));
+    if (state.wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "running"));
     return { ok: true };
   });
 }
@@ -1229,20 +1188,20 @@ function showMainWindow() {
       .catch((error) => console.error(error));
     return;
   }
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  if (!state.mainWindow || state.mainWindow.isDestroyed()) {
     createMainWindow().catch((error) => console.error("Unable to create the main window", error));
     return;
   }
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  if (state.mainWindow.isMinimized()) state.mainWindow.restore();
+  state.mainWindow.show();
+  state.mainWindow.focus();
 }
 
 function rebuildTrayMenu() {
-  if (!tray || tray.isDestroyed()) return;
+  if (!state.tray || state.tray.isDestroyed()) return;
   const startupSupported = app.isPackaged;
   const openAtLogin = startupSupported && app.getLoginItemSettings().openAtLogin;
-  tray.setContextMenu(
+  state.tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "打开 Luma", click: showMainWindow },
       { type: "separator" },
@@ -1260,7 +1219,7 @@ function rebuildTrayMenu() {
       {
         label: "退出 Luma",
         click: () => {
-          isQuitting = true;
+          state.isQuitting = true;
           app.quit();
         },
       },
@@ -1269,7 +1228,7 @@ function rebuildTrayMenu() {
 }
 
 async function createWindowsTray() {
-  if (process.platform !== "win32" || tray) return;
+  if (process.platform !== "win32" || state.tray) return;
   let trayImage = nativeImage.createEmpty();
   try {
     if (!app.isPackaged) {
@@ -1279,22 +1238,22 @@ async function createWindowsTray() {
       }
     }
     if (trayImage.isEmpty()) trayImage = await app.getFileIcon(process.execPath, { size: "small" });
-    tray = new Tray(trayImage);
-    tray.setToolTip("Luma 动态壁纸");
-    tray.on("double-click", showMainWindow);
+    state.tray = new Tray(trayImage);
+    state.tray.setToolTip("Luma 动态壁纸");
+    state.tray.on("double-click", showMainWindow);
     rebuildTrayMenu();
   } catch (error) {
-    tray = null;
-    console.error("Unable to create the Windows tray icon", error);
+    state.tray = null;
+    console.error("Unable to create the Windows state.tray icon", error);
   }
 }
 
 function configureSessionSecurity() {
   const permitsFullscreen = (webContents, permission) =>
     permission === "fullscreen" &&
-    mainWindow &&
-    !mainWindow.isDestroyed() &&
-    webContents?.id === mainWindow.webContents.id;
+    state.mainWindow &&
+    !state.mainWindow.isDestroyed() &&
+    webContents?.id === state.mainWindow.webContents.id;
   session.defaultSession.setPermissionCheckHandler((webContents, permission) =>
     Boolean(permitsFullscreen(webContents, permission)),
   );
@@ -1310,22 +1269,22 @@ function registerDisplayLifecycle() {
     scheduleWallpaperPlacementRefresh("display-metrics-changed"),
   );
   const handlePowerEvent = (eventName) => {
-    const transition = transitionWallpaperPowerState(wallpaperPowerState, eventName);
-    wallpaperPowerState = {
+    const transition = transitionWallpaperPowerState(state.wallpaperPowerState, eventName);
+    state.wallpaperPowerState = {
       sleeping: transition.sleeping,
       locked: transition.locked,
       suspended: transition.suspended,
     };
     if (transition.command === "pause") {
-      if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
-      displayRefreshTimer = null;
+      if (state.displayRefreshTimer) clearTimeout(state.displayRefreshTimer);
+      state.displayRefreshTimer = null;
       sendWallpaperPlaybackControl("pause", eventName);
-      if (wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "paused"));
+      if (state.wallpaperMedia) publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "paused"));
       return;
     }
     if (transition.refreshPlacement) scheduleWallpaperPlacementRefresh(eventName);
-    if (wallpaperMedia && !wallpaperPowerState.suspended) {
-      publishWallpaperRuntime(runtimeStateFor(wallpaperMedia, "running"));
+    if (state.wallpaperMedia && !state.wallpaperPowerState.suspended) {
+      publishWallpaperRuntime(runtimeStateFor(state.wallpaperMedia, "running"));
     }
   };
   powerMonitor.on("suspend", () => handlePowerEvent("suspend"));
@@ -1336,7 +1295,7 @@ function registerDisplayLifecycle() {
 
 async function restoreLastVideoWallpaper() {
   if (process.platform !== "darwin" && process.platform !== "win32") return;
-  await stateWriteQueue;
+  await state.stateWriteQueue;
   const persisted = await readPersistedState();
   const lastApplied = persisted.lastApplied;
   if (!lastApplied || lastApplied.kind !== "video") return;
@@ -1358,14 +1317,14 @@ async function restoreLastVideoWallpaper() {
 }
 
 async function createMainWindow() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-    return mainWindow;
+  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+    state.mainWindow.show();
+    state.mainWindow.focus();
+    return state.mainWindow;
   }
 
   const nextWindow = new BrowserWindow({
-    ...MAIN_WINDOW_BOUNDS,
+    ...consts.MAIN_WINDOW_BOUNDS,
     show: false,
     backgroundColor: "#78dce5",
     title: "Luma",
@@ -1379,16 +1338,16 @@ async function createMainWindow() {
     },
   });
 
-  mainWindow = nextWindow;
+  state.mainWindow = nextWindow;
   nextWindow.once("ready-to-show", () => nextWindow.show());
   nextWindow.on("close", (event) => {
-    if (process.platform === "win32" && !isQuitting && tray && !tray.isDestroyed()) {
+    if (process.platform === "win32" && !state.isQuitting && state.tray && !state.tray.isDestroyed()) {
       event.preventDefault();
       nextWindow.hide();
     }
   });
   nextWindow.on("closed", () => {
-    if (mainWindow === nextWindow) mainWindow = null;
+    if (state.mainWindow === nextWindow) state.mainWindow = null;
   });
 
   const devServerUrl = trustedDevServerUrl(process.env.VITE_DEV_SERVER_URL);
@@ -1409,7 +1368,7 @@ async function startApplication() {
       userDataPath: app.getPath("userData"),
     })
   ) {
-    isQuitting = true;
+    state.isQuitting = true;
     app.quit();
     return;
   }
@@ -1433,9 +1392,9 @@ async function startApplication() {
     });
   }
   initializeAutoUpdates({
-    getMainWindow: () => mainWindow,
+    getMainWindow: () => state.mainWindow,
     beforeInstall: () => {
-      isQuitting = true;
+      state.isQuitting = true;
       destroyWallpaperWindow();
     },
   });
@@ -1457,24 +1416,24 @@ if (!hasSingleInstanceLock) {
     .catch((error) => {
       console.error("Luma failed to start", error);
       dialog.showErrorBox("Luma 无法启动", dependencyMessage(error));
-      isQuitting = true;
+      state.isQuitting = true;
       app.exit(1);
     });
 }
 
 app.on("before-quit", () => {
-  isQuitting = true;
+  state.isQuitting = true;
   stopAutoUpdates();
-  if (displayRefreshTimer) clearTimeout(displayRefreshTimer);
-  displayRefreshTimer = null;
+  if (state.displayRefreshTimer) clearTimeout(state.displayRefreshTimer);
+  state.displayRefreshTimer = null;
   destroyWallpaperWindow();
-  if (tray && !tray.isDestroyed()) tray.destroy();
-  tray = null;
+  if (state.tray && !state.tray.isDestroyed()) state.tray.destroy();
+  state.tray = null;
 });
 
 app.on("window-all-closed", () => {
   if (process.platform === "win32") {
-    if (!tray || tray.isDestroyed()) app.quit();
+    if (!state.tray || state.tray.isDestroyed()) app.quit();
     return;
   }
   if (process.platform !== "darwin") app.quit();
