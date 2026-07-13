@@ -96,8 +96,9 @@
       "category": "public.app-category.lifestyle",
       "publish": [
         {
-          "provider": "generic",
-          "url": "https://pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev",
+          "provider": "github",
+          "owner": "loveOneBaby",
+          "repo": "luma-wallpaper",
           "channel": "latest-${arch}"
         }
       ],
@@ -111,8 +112,9 @@
       "artifactName": "Luma-${version}-${arch}-Setup.${ext}",
       "publish": [
         {
-          "provider": "generic",
-          "url": "https://pub-ddf8e64b029a4710bc22937d4c5ff992.r2.dev",
+          "provider": "github",
+          "owner": "loveOneBaby",
+          "repo": "luma-wallpaper",
           "channel": "latest"
         }
       ],
