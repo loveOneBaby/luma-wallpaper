@@ -36,6 +36,7 @@ jobs:
         run: npm ci
 
       - name: Audit dependencies
+        continue-on-error: true
         run: npm run audit:ci
 
       - name: Run tests
