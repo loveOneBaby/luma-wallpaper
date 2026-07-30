@@ -65,6 +65,8 @@ npm run desktop:build:win
 
 <https://loveonebaby.github.io/luma-wallpaper/>
 
+首页是 Luma 产品页，提供 Web 预览与 GitHub Releases 下载入口；点击“立即预览”即可打开浏览器内的媒体库体验。
+
 ## 桌面端自动发布
 
 推送与 `package.json` 版本一致的 `v*` 标签会构建全部平台，并把产物与更新清单发布到源仓库的 [GitHub Releases](https://github.com/loveOneBaby/luma-wallpaper/releases)（用 `GITHUB_TOKEN` 即可，无需额外令牌）。桌面端自动更新通过 electron-updater 的 `github` provider 查询源仓库的 `latest*.yml`。
