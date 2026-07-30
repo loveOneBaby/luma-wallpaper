@@ -43,6 +43,8 @@ npm test
 npm run dev
 ```
 
+完整的 GitHub Pages、桌面端 Release、签名与故障排查流程见 [部署文档](./docs/deployment.md)。
+
 启动 Electron 桌面端：
 
 ```bash
