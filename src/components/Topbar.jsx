@@ -2,30 +2,57 @@ import { ArrowCircleUpIcon, SquaresFourIcon, UploadSimpleIcon } from "@phosphor-
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_LIBRARY_BUTTON } from "./glassPresets.js";
 
+const CATEGORIES = [
+  { id: "all", label: "全部" },
+  { id: "image", label: "图片" },
+  { id: "video", label: "视频" },
+  { id: "favorite", label: "收藏" },
+];
+
 export function Topbar({
   isLibraryOpen,
   onToggleLibrary,
   onUpload,
+  mediaName = "未选择壁纸",
+  mediaKind = "image",
+  mediaDurationLabel = "",
+  activeCategory = "all",
+  onCategoryChange,
   platformLabel,
   pendingUpdate = null,
   onReopenUpdate,
   isLibraryReady = true,
   inert = false,
 }) {
+  const currentCategory = CATEGORIES.some((category) => category.id === activeCategory)
+    ? activeCategory
+    : "all";
+
   return (
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
       <div className="brand">Luma</div>
       <div className="topbar-current" aria-hidden="true">
         <span>‹</span>
-        <strong>海岸晨光</strong>
-        <span>· 动态视频 · 00:20</span>
+        <strong>{mediaName}</strong>
+        <span>
+          · {mediaKind === "video" ? "动态视频" : "静态图片"}
+          {mediaDurationLabel ? ` · ${mediaDurationLabel}` : ""}
+        </span>
         <span>›</span>
       </div>
       <nav className="topbar-categories" aria-label="快速分类">
-        <button type="button">全部</button>
-        <button type="button">图片</button>
-        <button type="button">视频</button>
-        <button type="button">收藏</button>
+        {CATEGORIES.map((category) => (
+          <button
+            key={category.id}
+            type="button"
+            className={currentCategory === category.id ? "is-active" : ""}
+            onClick={() => onCategoryChange?.(category.id)}
+            disabled={!isLibraryReady}
+            aria-pressed={currentCategory === category.id}
+          >
+            {category.label}
+          </button>
+        ))}
         <SquaresFourIcon size={21} weight="regular" aria-hidden="true" />
       </nav>
       <div className="topbar-actions">

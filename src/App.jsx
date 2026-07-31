@@ -186,16 +186,33 @@ export function App() {
       <div className="ambient-shade" aria-hidden="true" />
 
       <section className="wallpaper-meta" aria-label="当前壁纸信息">
-        <span className="wallpaper-index">01</span>
-        <h1>海岸晨光</h1>
-        <p>{media.kind === "video" ? "动态视频 · 00:20" : "静态图片"}</p>
-        <span className="wallpaper-active"><i />正在使用</span>
+        <span className="wallpaper-index">
+          {String(
+            Math.max(0, items.findIndex((item) => item.id === selectedId) + 1),
+          ).padStart(2, "0")}
+        </span>
+        <h1>{media.name}</h1>
+        <p>
+          {media.kind === "video"
+            ? `动态视频 ${media.durationLabel ? `· ${media.durationLabel}` : ""}`.trim()
+            : "静态图片"}
+        </p>
+        {appliedMatchKey ? (
+          <span className="wallpaper-active">
+            <i />正在使用
+          </span>
+        ) : null}
       </section>
 
       <Topbar
         isLibraryOpen={isLibraryOpen}
         onToggleLibrary={() => setLibraryOpen((value) => !value)}
         onUpload={openFilePicker}
+        mediaName={media.name}
+        mediaKind={media.kind}
+        mediaDurationLabel={media.durationLabel}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
         platformLabel={getPlatformLabel(platform)}
         pendingUpdate={pendingUpdate}
         onReopenUpdate={reopenUpdate}

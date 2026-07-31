@@ -76,12 +76,15 @@ body { background: #aebfc5; }
   height: 46px;
   padding: 0;
   border: 0;
+  background: rgba(255,255,255,.02);
   color: var(--ink);
-  background: transparent;
   font-size: 16px;
   cursor: pointer;
 }
-.topbar-categories button:first-child { border-bottom: 2px solid var(--cyan); }
+.topbar-categories button.is-active,
+.topbar-categories button:hover:not(:disabled) {
+  border-bottom: 2px solid var(--cyan);
+}
 
 .topbar-actions { position: absolute; left: 0; }
 .library-button, .platforms { display: none !important; }
