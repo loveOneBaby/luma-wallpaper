@@ -1,6 +1,6 @@
-import { ArrowCircleUpIcon, CloudArrowUpIcon, SquaresFourIcon } from "@phosphor-icons/react";
+import { ArrowCircleUpIcon, SquaresFourIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
-import { GLASS_LIBRARY_BUTTON, GLASS_UPLOAD_BUTTON } from "./glassPresets.js";
+import { GLASS_LIBRARY_BUTTON } from "./glassPresets.js";
 
 export function Topbar({
   isLibraryOpen,
@@ -15,6 +15,19 @@ export function Topbar({
   return (
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
       <div className="brand">Luma</div>
+      <div className="topbar-current" aria-hidden="true">
+        <span>‹</span>
+        <strong>海岸晨光</strong>
+        <span>· 动态视频 · 00:20</span>
+        <span>›</span>
+      </div>
+      <nav className="topbar-categories" aria-label="快速分类">
+        <button type="button">全部</button>
+        <button type="button">图片</button>
+        <button type="button">视频</button>
+        <button type="button">收藏</button>
+        <SquaresFourIcon size={21} weight="regular" aria-hidden="true" />
+      </nav>
       <div className="topbar-actions">
         {pendingUpdate ? (
           <GlassSurface
@@ -45,19 +58,17 @@ export function Topbar({
           />
           <span>媒体库</span>
         </GlassSurface>
-        <GlassSurface
-          {...GLASS_UPLOAD_BUTTON}
-          as="button"
-          className="upload-button liquid-glass"
+        <button
+          className="upload-button"
           type="button"
           onClick={onUpload}
           disabled={!isLibraryReady}
-          aria-label={isLibraryReady ? "上传图片或视频" : "正在恢复媒体库"}
+          aria-label={isLibraryReady ? "添加素材" : "正在恢复媒体库"}
           title={isLibraryReady ? undefined : "正在恢复媒体库，请稍候"}
         >
-          <CloudArrowUpIcon size={22} weight="regular" aria-hidden="true" />
-          <span>上传图片或视频</span>
-        </GlassSurface>
+          <UploadSimpleIcon size={22} weight="regular" aria-hidden="true" />
+          <span>添加素材</span>
+        </button>
         <span className="platforms">{platformLabel}</span>
       </div>
     </header>

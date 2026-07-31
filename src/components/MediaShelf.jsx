@@ -120,7 +120,7 @@ const MediaTile = memo(function MediaTile({
 }) {
   return (
     <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""} ${missing ? "is-missing" : ""}`}>
-      {isApplied ? (
+      {isApplied || (item.isDemo && isSelected) ? (
         <span className="applied-badge" aria-label="正在使用">
           <span className="applied-dot" aria-hidden="true" />
           正在使用
@@ -156,6 +156,11 @@ const MediaTile = memo(function MediaTile({
         <span className="media-tile-name" title={item.name}>
           {item.name}
         </span>
+        {item.durationLabel ? (
+          <span className="media-tile-duration" aria-hidden="true">
+            {item.durationLabel}
+          </span>
+        ) : null}
       </button>
 
       <button
@@ -220,7 +225,7 @@ export const MediaShelf = memo(function MediaShelf({
     width: 1_024,
     tileExtent: DESKTOP_TILE_EXTENT,
   });
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const visibleItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -314,29 +319,32 @@ export const MediaShelf = memo(function MediaShelf({
           <h2>媒体库</h2>
         </div>
 
-        {searchOpen ? (
-          <input
-            className="shelf-search-input"
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="搜索文件名…"
-            aria-label="搜索媒体库"
-            autoFocus
-          />
-        ) : null}
-        <button
-          className="shelf-search-toggle"
-          type="button"
-          onClick={() => {
-            setSearchOpen((value) => !value);
-            if (searchOpen) setSearchQuery("");
-          }}
-          aria-label={searchOpen ? "关闭搜索" : "搜索媒体库"}
-          aria-expanded={searchOpen}
-        >
-          <MagnifyingGlassIcon size={18} weight="regular" aria-hidden="true" />
-        </button>
+        <div className={`shelf-search ${searchOpen ? "is-open" : ""}`}>
+          <MagnifyingGlassIcon size={17} weight="regular" aria-hidden="true" />
+          {searchOpen ? (
+            <input
+              className="shelf-search-input"
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="搜索文件名"
+              aria-label="搜索媒体库"
+              autoFocus
+            />
+          ) : null}
+          <button
+            className="shelf-search-toggle"
+            type="button"
+            onClick={() => {
+              setSearchOpen((value) => !value);
+              if (searchOpen) setSearchQuery("");
+            }}
+            aria-label={searchOpen ? "关闭搜索" : "搜索媒体库"}
+            aria-expanded={searchOpen}
+          >
+            <span className="visually-hidden">{searchOpen ? "关闭搜索" : "搜索媒体库"}</span>
+          </button>
+        </div>
 
         <div className="category-tabs" role="tablist" aria-label="壁纸分类">
           {CATEGORIES.map((category, index) => (
@@ -416,6 +424,16 @@ export const MediaShelf = memo(function MediaShelf({
           </button>
         </div>
       )}
+      <div className="media-stack-row media-stack-row-one" aria-hidden="true">
+        {visibleItems.slice(1, 7).map((item) => (
+          <img key={`stack-one-${item.id}`} src={item.poster ?? item.src} alt="" />
+        ))}
+      </div>
+      <div className="media-stack-row media-stack-row-two" aria-hidden="true">
+        {[...visibleItems].reverse().slice(0, 6).map((item) => (
+          <img key={`stack-two-${item.id}`} src={item.poster ?? item.src} alt="" />
+        ))}
+      </div>
     </GlassSurface>
   );
 });

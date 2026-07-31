@@ -162,6 +162,7 @@ export function App() {
         media={media}
         videoRef={videoRef}
         muted={muted}
+        isPlaying={isPlaying}
         isApplied={Boolean(
           appliedMatchKey
             && media
@@ -183,6 +184,13 @@ export function App() {
       />
 
       <div className="ambient-shade" aria-hidden="true" />
+
+      <section className="wallpaper-meta" aria-label="当前壁纸信息">
+        <span className="wallpaper-index">01</span>
+        <h1>海岸晨光</h1>
+        <p>{media.kind === "video" ? "动态视频 · 00:20" : "静态图片"}</p>
+        <span className="wallpaper-active"><i />正在使用</span>
+      </section>
 
       <Topbar
         isLibraryOpen={isLibraryOpen}
@@ -266,6 +274,56 @@ export function App() {
         onApply={() => handleApplyWallpaper(media, false)}
         inert={isConflictOpen}
       />
+
+      {!isFullscreen ? (
+        <aside className="desktop-runtime-panel" aria-label="桌面壁纸运行状态">
+          <div className="desktop-runtime-card">
+            <div className="desktop-runtime-label">
+              <i aria-hidden="true" />
+              <span>
+                {platform === "darwin" || platform === "win32"
+                  ? wallpaperRuntime.status === "running" || wallpaperRuntime.status === "paused"
+                    ? "动态壁纸运行中"
+                    : "动态壁纸未运行"
+                  : "浏览器仅支持预览"}
+              </span>
+            </div>
+            <div className="desktop-runtime-actions">
+              <button
+                type="button"
+                disabled={platform !== "darwin" && platform !== "win32"}
+                onClick={
+                  wallpaperRuntime.status === "paused"
+                    ? handleResumeWallpaper
+                    : handlePauseWallpaper
+                }
+              >
+                {wallpaperRuntime.status === "paused" ? "继续" : "暂停"}
+              </button>
+              <button
+                type="button"
+                disabled={platform !== "darwin" && platform !== "win32"}
+                onClick={handleStopWallpaper}
+              >
+                停止
+              </button>
+            </div>
+          </div>
+          <button
+            className="desktop-recovery-link"
+            type="button"
+            onClick={() => {
+              if (platform === "darwin" || platform === "win32") {
+                setConflictOpen(true);
+              } else {
+                document.querySelector(".apply-button")?.click();
+              }
+            }}
+          >
+            {platform === "darwin" || platform === "win32" ? "未生效？" : "了解桌面端"}
+          </button>
+        </aside>
+      ) : null}
 
       {isConflictOpen ? (
         <ConflictDialog

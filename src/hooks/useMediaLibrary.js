@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import demoImage from "../assets/ocean-morning.png";
 import demoVideo from "../assets/ocean-morning.mp4";
+import alpineLake from "../assets/wallpapers/alpine-lake.png";
+import cityNight from "../assets/wallpapers/city-night.png";
+import coastalSunset from "../assets/wallpapers/coastal-sunset.png";
+import mistyLake from "../assets/wallpapers/misty-lake.png";
+import sunlitForest from "../assets/wallpapers/sunlit-forest.png";
 import { getBridge } from "../services/desktopBridge.js";
 import {
   estimateLibraryStorage,
@@ -33,7 +38,8 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "ocean-morning-video",
     sourceKey: "demo:ocean-morning-video",
-    poster: demoImage,
+    poster: coastalSunset,
+    durationLabel: "00:20",
   },
   {
     id: "demo-image",
@@ -45,6 +51,55 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "ocean-morning-image",
     sourceKey: "demo:ocean-morning-image",
+    durationLabel: "00:15",
+  },
+  {
+    id: "demo-alpine-lake",
+    src: alpineLake,
+    name: "山脉倒影",
+    kind: "image",
+    favorite: false,
+    objectUrl: false,
+    isDemo: true,
+    demoKey: "alpine-lake",
+    sourceKey: "demo:alpine-lake",
+    durationLabel: "00:15",
+  },
+  {
+    id: "demo-sunlit-forest",
+    src: sunlitForest,
+    name: "林间光影",
+    kind: "image",
+    favorite: true,
+    objectUrl: false,
+    isDemo: true,
+    demoKey: "sunlit-forest",
+    sourceKey: "demo:sunlit-forest",
+    durationLabel: "00:18",
+  },
+  {
+    id: "demo-city-night",
+    src: cityNight,
+    name: "城市夜景",
+    kind: "image",
+    favorite: false,
+    objectUrl: false,
+    isDemo: true,
+    demoKey: "city-night",
+    sourceKey: "demo:city-night",
+    durationLabel: "00:18",
+  },
+  {
+    id: "demo-misty-lake",
+    src: mistyLake,
+    name: "雾色山湖",
+    kind: "image",
+    favorite: false,
+    objectUrl: false,
+    isDemo: true,
+    demoKey: "misty-lake",
+    sourceKey: "demo:misty-lake",
+    durationLabel: "00:12",
   },
 ];
 
@@ -160,7 +215,7 @@ export function useMediaLibrary({ showFeedback, showUploadResult, onStopIfApplie
   const [items, setItems] = useState(() => DEMO_ITEMS.map((item) => ({ ...item })));
   const [selectedId, setSelectedId] = useState(DEMO_ITEMS[0].id);
   const [activeCategory, setActiveCategory] = useState("all");
-  const [isLibraryOpen, setLibraryOpen] = useState(false);
+  const [isLibraryOpen, setLibraryOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isPersistenceEnabled, setPersistenceEnabled] = useState(false);

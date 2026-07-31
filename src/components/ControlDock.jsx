@@ -1,12 +1,12 @@
 import { useState } from "react";
 import {
-  ArrowsInIcon,
-  ArrowsOutIcon,
-  MonitorArrowUpIcon,
+  CornersInIcon,
+  CornersOutIcon,
+  MonitorIcon,
   PauseIcon,
   PlayIcon,
   SpeakerHighIcon,
-  SpeakerSlashIcon,
+  SpeakerXIcon,
   SpinnerGapIcon,
 } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
@@ -103,7 +103,7 @@ export function ControlDock({
         aria-label={!isVideo ? "静态图片没有声音" : muted ? "打开声音" : "静音"}
       >
         {muted ? (
-          <SpeakerSlashIcon size={26} weight="regular" aria-hidden="true" />
+          <SpeakerXIcon size={23} weight="regular" aria-hidden="true" />
         ) : (
           <SpeakerHighIcon size={26} weight="regular" aria-hidden="true" />
         )}
@@ -116,11 +116,11 @@ export function ControlDock({
         aria-label={isFullscreen ? "退出全屏预览" : "进入全屏预览"}
       >
         {isFullscreen ? (
-          <ArrowsInIcon className="fullscreen-icon" size={24} weight="regular" aria-hidden="true" />
+          <CornersInIcon className="fullscreen-icon" size={22} weight="regular" aria-hidden="true" />
         ) : (
-          <ArrowsOutIcon
+          <CornersOutIcon
             className="fullscreen-icon"
-            size={24}
+            size={22}
             weight="regular"
             aria-hidden="true"
           />
@@ -140,7 +140,7 @@ export function ControlDock({
         {isApplying ? (
           <SpinnerGapIcon size={22} weight="bold" aria-hidden="true" />
         ) : (
-          <MonitorArrowUpIcon size={22} weight="regular" aria-hidden="true" />
+          <MonitorIcon size={21} weight="regular" aria-hidden="true" />
         )}
         <span>{isDesktop ? "设为壁纸" : "桌面端可设置"}</span>
       </button>

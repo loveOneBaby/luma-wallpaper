@@ -2,6 +2,7 @@ export function MediaStage({
   media,
   videoRef,
   muted,
+  isPlaying = false,
   isApplied = false,
   onLoadedMetadata,
   onTimeUpdate,
@@ -19,23 +20,28 @@ export function MediaStage({
         </span>
       ) : null}
       {media.kind === "video" ? (
-        <video
-          key={media.src}
-          ref={videoRef}
-          className="wallpaper-media"
-          src={media.src}
-          poster={media.poster}
-          muted={muted}
-          loop
-          playsInline
-          preload="metadata"
-          aria-hidden="true"
-          onLoadedMetadata={onLoadedMetadata}
-          onTimeUpdate={onTimeUpdate}
-          onPlay={onPlay}
-          onPause={onPause}
-          onError={onVideoError}
-        />
+        <>
+          <video
+            key={media.src}
+            ref={videoRef}
+            className="wallpaper-media"
+            src={media.src}
+            poster={media.poster}
+            muted={muted}
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+            onLoadedMetadata={onLoadedMetadata}
+            onTimeUpdate={onTimeUpdate}
+            onPlay={onPlay}
+            onPause={onPause}
+            onError={onVideoError}
+          />
+          {!isPlaying && media.poster ? (
+            <img className="video-poster-overlay" src={media.poster} alt="" aria-hidden="true" />
+          ) : null}
+        </>
       ) : (
         <img
           key={media.src}
