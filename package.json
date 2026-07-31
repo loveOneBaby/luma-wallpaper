@@ -1,6 +1,6 @@
 {
   "name": "luma-wallpaper",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "A calm image and video wallpaper manager for macOS, Windows, and the web.",
   "author": "Luma",
   "repository": {
@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "vite build",
     "test": "node --test",
-    "audit:ci": "npm audit --registry=https://registry.npmjs.org --audit-level=high",
+    "audit:ci": "npm audit --omit=dev --registry=https://registry.npmjs.org --audit-level=high",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
