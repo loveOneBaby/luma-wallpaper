@@ -828,6 +828,10 @@ body {
     height: 44px;
     bottom: calc(var(--cinema-shelf-height) / 2 - 22px);
   }
+
+  .shelf-search.is-open {
+    width: min(260px, calc(100vw - 160px));
+  }
 }
 
 @media (max-width: 590px) {
@@ -952,5 +956,10 @@ body {
 
   .shelf-search {
     right: 6px;
+  }
+
+  .shelf-search.is-open {
+    right: 6px;
+    width: min(220px, calc(100vw - 72px));
   }
 }

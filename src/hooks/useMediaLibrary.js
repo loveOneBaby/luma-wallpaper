@@ -3,7 +3,6 @@ import demoImage from "../assets/ocean-morning.png";
 import demoVideo from "../assets/ocean-morning.mp4";
 import alpineLake from "../assets/wallpapers/alpine-lake.png";
 import cityNight from "../assets/wallpapers/city-night.png";
-import coastalSunset from "../assets/wallpapers/coastal-sunset.png";
 import mistyLake from "../assets/wallpapers/misty-lake.png";
 import sunlitForest from "../assets/wallpapers/sunlit-forest.png";
 import { getBridge } from "../services/desktopBridge.js";
@@ -38,7 +37,7 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "ocean-morning-video",
     sourceKey: "demo:ocean-morning-video",
-    poster: coastalSunset,
+    poster: demoImage,
     durationLabel: "00:20",
   },
   {
@@ -51,7 +50,6 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "ocean-morning-image",
     sourceKey: "demo:ocean-morning-image",
-    durationLabel: "00:15",
   },
   {
     id: "demo-alpine-lake",
@@ -63,7 +61,6 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "alpine-lake",
     sourceKey: "demo:alpine-lake",
-    durationLabel: "00:15",
   },
   {
     id: "demo-sunlit-forest",
@@ -75,7 +72,6 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "sunlit-forest",
     sourceKey: "demo:sunlit-forest",
-    durationLabel: "00:18",
   },
   {
     id: "demo-city-night",
@@ -87,7 +83,6 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "city-night",
     sourceKey: "demo:city-night",
-    durationLabel: "00:18",
   },
   {
     id: "demo-misty-lake",
@@ -99,7 +94,6 @@ const DEMO_ITEMS = [
     isDemo: true,
     demoKey: "misty-lake",
     sourceKey: "demo:misty-lake",
-    durationLabel: "00:12",
   },
 ];
 

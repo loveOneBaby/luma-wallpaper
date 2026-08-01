@@ -104,6 +104,11 @@ export function App() {
   } = usePlayback({ media });
 
   const platform = getDesktopPlatform();
+  const isCurrentMediaApplied = Boolean(
+    appliedMatchKey
+      && media
+      && ((media.demoKey ? `demo:${media.demoKey}` : media.filePath) === appliedMatchKey),
+  );
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -161,11 +166,7 @@ export function App() {
         videoRef={videoRef}
         muted={muted}
         isPlaying={isPlaying}
-        isApplied={Boolean(
-          appliedMatchKey
-            && media
-            && ((media.demoKey ? `demo:${media.demoKey}` : media.filePath) === appliedMatchKey),
-        )}
+        isApplied={isCurrentMediaApplied}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onPlay={handlePlay}
@@ -195,7 +196,7 @@ export function App() {
             ? `动态视频 ${media.durationLabel ? `· ${media.durationLabel}` : ""}`.trim()
             : "静态图片"}
         </p>
-        {appliedMatchKey ? (
+        {isCurrentMediaApplied ? (
           <span className="wallpaper-active">
             <i />正在使用
           </span>

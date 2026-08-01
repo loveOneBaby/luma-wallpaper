@@ -31,7 +31,7 @@ export function MediaStage({
       {media.kind === "video" ? (
         <>
           <video
-            key={media.src}
+            key={`${media.id}:${media.src}`}
             ref={videoRef}
             className="wallpaper-media"
             src={media.src}

@@ -153,7 +153,7 @@ const MediaTile = memo(function MediaTile({
 
   return (
     <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""} ${missing ? "is-missing" : ""}`}>
-      {isApplied || (item.isDemo && isSelected) ? (
+      {isApplied ? (
         <span className="applied-badge" aria-label="正在使用">
           <span className="applied-dot" aria-hidden="true" />
           正在使用
@@ -203,7 +203,7 @@ const MediaTile = memo(function MediaTile({
         <span className="media-tile-name" title={item.name}>
           {item.name}
         </span>
-        {item.durationLabel ? (
+        {item.kind === "video" && item.durationLabel ? (
           <span className="media-tile-duration" aria-hidden="true">
             {item.durationLabel}
           </span>
@@ -285,6 +285,12 @@ export const MediaShelf = memo(function MediaShelf({
       return true;
     });
   }, [activeCategory, items, searchQuery]);
+
+  useEffect(() => {
+    if (!isReady || visibleItems.length === 0) return;
+    if (visibleItems.some((item) => item.id === selectedId)) return;
+    onSelect(visibleItems[0].id);
+  }, [isReady, onSelect, selectedId, visibleItems]);
 
   useEffect(() => {
     const strip = stripRef.current;
