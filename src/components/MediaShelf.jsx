@@ -1,6 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowClockwiseIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
   HeartIcon,
   ImageIcon,
   MagnifyingGlassIcon,
@@ -270,7 +272,7 @@ export const MediaShelf = memo(function MediaShelf({
     width: 1_024,
     tileExtent: DESKTOP_TILE_EXTENT,
   });
-  const [searchOpen, setSearchOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const visibleItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -314,6 +316,15 @@ export const MediaShelf = memo(function MediaShelf({
         left: strip.scrollLeft,
         width: strip.clientWidth,
       }));
+    });
+  };
+
+  const scrollStrip = (direction) => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    strip.scrollBy({
+      left: direction * Math.max(strip.clientWidth * 0.72, viewport.tileExtent),
+      behavior: "smooth",
     });
   };
 
@@ -416,14 +427,24 @@ export const MediaShelf = memo(function MediaShelf({
       </div>
 
       {visibleItems.length > 0 ? (
-        <div
-          ref={stripRef}
-          id="media-library-panel"
-          className="media-strip"
-          role="tabpanel"
-          aria-labelledby={activeTabId}
-          onScroll={useVirtualWindow ? handleStripScroll : undefined}
-        >
+        <>
+          <button
+            className="shelf-scroll-button shelf-scroll-previous"
+            type="button"
+            onClick={() => scrollStrip(-1)}
+            disabled={!isReady}
+            aria-label="向前浏览壁纸"
+          >
+            <CaretLeftIcon size={25} weight="regular" aria-hidden="true" />
+          </button>
+          <div
+            ref={stripRef}
+            id="media-library-panel"
+            className="media-strip"
+            role="tabpanel"
+            aria-labelledby={activeTabId}
+            onScroll={handleStripScroll}
+          >
           {startIndex > 0 ? (
             <div aria-hidden="true" style={{ flex: `0 0 ${startIndex * viewport.tileExtent}px` }} />
           ) : null}
@@ -450,7 +471,17 @@ export const MediaShelf = memo(function MediaShelf({
               style={{ flex: `0 0 ${(visibleItems.length - endIndex) * viewport.tileExtent}px` }}
             />
           ) : null}
-        </div>
+          </div>
+          <button
+            className="shelf-scroll-button shelf-scroll-next"
+            type="button"
+            onClick={() => scrollStrip(1)}
+            disabled={!isReady}
+            aria-label="向后浏览壁纸"
+          >
+            <CaretRightIcon size={25} weight="regular" aria-hidden="true" />
+          </button>
+        </>
       ) : (
         <div
           id="media-library-panel"

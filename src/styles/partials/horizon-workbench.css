@@ -94,6 +94,33 @@ body { background: #aebfc5; }
 .topbar-actions { position: absolute; left: 0; }
 .library-button, .platforms { display: none !important; }
 
+.update-check-button,
+.update-pill {
+  position: fixed;
+  z-index: 9;
+  top: 33px;
+  left: 344px;
+  height: 46px;
+  padding: 0 15px;
+  border: 1px solid rgba(16,42,51,.16);
+  border-radius: 9px;
+  color: rgba(16,42,51,.78);
+  background: rgba(255,255,255,.12);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  backdrop-filter: blur(14px) saturate(1.08);
+}
+.update-check-button:hover,
+.update-pill:hover {
+  color: var(--ink);
+  background: rgba(255,255,255,.28);
+  filter: none;
+}
+.update-pill {
+  border-color: rgba(103,220,233,.48);
+  background: rgba(225,250,251,.4);
+}
+
 .upload-button {
   position: fixed !important;
   top: 33px;
@@ -268,7 +295,8 @@ body { background: #aebfc5; }
 
 .media-shelf {
   left: 5.6vw;
-  bottom: 19.4vh;
+  top: calc(14.2vh + min(35.2vh, 420px) + 78px);
+  bottom: auto;
   width: 88vw;
   min-height: 220px;
   padding: 22px 24px 14px;
@@ -451,6 +479,7 @@ body { background: #aebfc5; }
 
 @media (min-width: 981px) and (max-width: 1250px) {
   .brand { font-size: 34px; }
+  .topbar-current { display: none; }
   .upload-button {
     left: 174px;
     min-width: 154px !important;
@@ -542,11 +571,29 @@ body { background: #aebfc5; }
   display: none !important;
 }
 
+.status-toast {
+  top: 116px;
+  right: 40px;
+  left: auto;
+  max-width: min(390px, calc(100vw - 80px));
+  transform: none;
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(28,56,66,.16);
+}
+.status-toast > .glass-surface__content { flex-wrap: wrap; }
+
 @media (max-height: 820px) {
   .media-stage { top: 13.5vh; height: 34vh; min-height: 240px; }
   .wallpaper-meta { top: 17vh; }
   .control-dock { top: calc(13.5vh + 34vh + 8px); }
-  .media-shelf { bottom: 22vh; transform: scale(.9); transform-origin: left bottom; width: 97vw; }
+  .media-shelf {
+    top: calc(13.5vh + 34vh + 70px);
+    width: 88vw;
+    min-height: 178px;
+    padding-block: 14px 10px;
+  }
+  .media-tile { height: 102px; }
+  .media-strip { min-height: 106px; }
 }
 
 @media (max-width: 980px) {
@@ -555,6 +602,9 @@ body { background: #aebfc5; }
   .control-dock { left: 4vw; width: 92vw; }
   .topbar-current { display: none; }
   .upload-button { left: auto; right: 28px; }
+  .update-check-button,
+  .update-pill { left: 120px; }
   .media-shelf { left: 4vw; width: 92vw; }
   .apply-button { top: auto; bottom: 20px; right: 24px; }
+  .status-toast { right: 20px; max-width: calc(100vw - 40px); }
 }

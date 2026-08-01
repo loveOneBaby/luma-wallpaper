@@ -41,7 +41,7 @@ export function ControlDock({
   const isApplying = applyState === "applying";
   const isVideo = mediaKind === "video";
   const isDesktop = platform === "darwin" || platform === "win32";
-  const isApplyUnavailable = isApplying || !isDesktop || mediaMissing;
+  const isApplyUnavailable = isApplying || mediaMissing;
   const [isWebDownloadOpen, setWebDownloadOpen] = useState(false);
 
   const handleApply = (event) => {
@@ -57,14 +57,15 @@ export function ControlDock({
   };
 
   return (
-    <GlassSurface
-      {...GLASS_CONTROL_DOCK}
-      as="section"
-      className="control-dock liquid-glass"
-      aria-label="预览控制"
-      aria-hidden={inert || undefined}
-      inert={inert}
-    >
+    <>
+      <GlassSurface
+        {...GLASS_CONTROL_DOCK}
+        as="section"
+        className="control-dock liquid-glass"
+        aria-label="预览控制"
+        aria-hidden={inert || undefined}
+        inert={inert}
+      >
       <button
         className="round-control play-control"
         type="button"
@@ -129,6 +130,8 @@ export function ControlDock({
         <span className="fullscreen-label">{isFullscreen ? "退出全屏" : "全屏预览"}</span>
       </button>
 
+      </GlassSurface>
+
       <button
         className={`apply-button ${isApplying ? "is-applying" : ""} ${!isDesktop ? "is-web-only" : ""}`}
         type="button"
@@ -163,6 +166,6 @@ export function ControlDock({
         onClose={() => setWebDownloadOpen(false)}
         inert={inert}
       />
-    </GlassSurface>
+    </>
   );
 }

@@ -83,6 +83,7 @@ export async function createMainWindow() {
   const nextWindow = new BrowserWindow({
     ...consts.MAIN_WINDOW_BOUNDS,
     show: false,
+    ...(app.isPackaged ? {} : { icon: path.join(appRoot, "build", "icon.png") }),
     backgroundColor: "#78dce5",
     title: "Luma",
     webPreferences: {
@@ -116,4 +117,3 @@ export async function createMainWindow() {
 
   return nextWindow;
 }
-

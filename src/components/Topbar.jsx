@@ -5,6 +5,7 @@ import {
 } from "@phosphor-icons/react";
 import { GlassSurface } from "./GlassSurface.jsx";
 import { GLASS_LIBRARY_BUTTON } from "./glassPresets.js";
+import appIcon from "../assets/app-icon.png";
 
 const CATEGORIES = [
   { id: "all", label: "全部" },
@@ -40,12 +41,20 @@ export function Topbar({
     updateState?.state === "downloading" ||
     updateState?.state === "installing";
 
-  const showUpdatePill = isDesktop && pendingUpdate;
-  const showUpdateCheck = isDesktop && !showUpdatePill && !isUpdateBusy && onCheckForUpdates;
+  // Keep desktop-only update controls visible in the local Web preview so their
+  // placement can be reviewed before packaging. Production Web builds still
+  // hide them because browser users cannot update the desktop application.
+  const showDesktopUpdateControls = isDesktop || import.meta.env.DEV;
+  const showUpdatePill = showDesktopUpdateControls && pendingUpdate;
+  const showUpdateCheck =
+    showDesktopUpdateControls && !showUpdatePill && !isUpdateBusy && onCheckForUpdates;
 
   return (
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
-      <div className="brand">Luma</div>
+      <div className="brand">
+        <img src={appIcon} alt="" aria-hidden="true" />
+        <span>Luma</span>
+      </div>
       <div className="topbar-current" aria-hidden="true">
         <span>‹</span>
         <strong>{mediaName}</strong>

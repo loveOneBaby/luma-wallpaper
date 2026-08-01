@@ -24,11 +24,21 @@
 }
 
 .brand {
-  padding-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: clamp(25px, 2vw, 30px);
   font-weight: 600;
   letter-spacing: -0.055em;
   line-height: 1;
+}
+
+.brand img {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  object-fit: cover;
+  box-shadow: 0 5px 18px rgba(2, 4, 26, 0.24);
 }
 
 .topbar-actions {
