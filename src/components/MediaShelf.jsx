@@ -319,11 +319,17 @@ export const MediaShelf = memo(function MediaShelf({
     });
   };
 
-  const scrollStrip = (direction) => {
+  const browseMedia = (direction) => {
     const strip = stripRef.current;
-    if (!strip) return;
-    strip.scrollBy({
-      left: direction * Math.max(strip.clientWidth * 0.72, viewport.tileExtent),
+    if (!strip || visibleItems.length === 0) return;
+    const currentIndex = visibleItems.findIndex((item) => item.id === selectedId);
+    const nextIndex =
+      currentIndex < 0
+        ? direction < 0 ? visibleItems.length - 1 : 0
+        : (currentIndex + direction + visibleItems.length) % visibleItems.length;
+    onSelect(visibleItems[nextIndex].id);
+    strip.scrollTo({
+      left: Math.max(0, nextIndex * viewport.tileExtent - strip.clientWidth * 0.35),
       behavior: "smooth",
     });
   };
@@ -431,9 +437,9 @@ export const MediaShelf = memo(function MediaShelf({
           <button
             className="shelf-scroll-button shelf-scroll-previous"
             type="button"
-            onClick={() => scrollStrip(-1)}
+            onClick={() => browseMedia(-1)}
             disabled={!isReady}
-            aria-label="向前浏览壁纸"
+            aria-label="选择上一张壁纸"
           >
             <CaretLeftIcon size={25} weight="regular" aria-hidden="true" />
           </button>
@@ -475,9 +481,9 @@ export const MediaShelf = memo(function MediaShelf({
           <button
             className="shelf-scroll-button shelf-scroll-next"
             type="button"
-            onClick={() => scrollStrip(1)}
+            onClick={() => browseMedia(1)}
             disabled={!isReady}
-            aria-label="向后浏览壁纸"
+            aria-label="选择下一张壁纸"
           >
             <CaretRightIcon size={25} weight="regular" aria-hidden="true" />
           </button>

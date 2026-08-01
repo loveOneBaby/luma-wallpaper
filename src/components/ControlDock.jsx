@@ -61,30 +61,31 @@ export function ControlDock({
       <GlassSurface
         {...GLASS_CONTROL_DOCK}
         as="section"
-        className="control-dock liquid-glass"
+        className={`control-dock liquid-glass ${isVideo ? "is-video" : "is-static"}`}
         aria-label="预览控制"
         aria-hidden={inert || undefined}
         inert={inert}
       >
-      <button
-        className="round-control play-control"
-        type="button"
-        onClick={onTogglePlay}
-        disabled={!isVideo}
-        aria-label={!isVideo ? "静态图片无需播放" : isPlaying ? "暂停预览" : "播放预览"}
-      >
-        {isPlaying ? (
-          <PauseIcon size={29} weight="fill" aria-hidden="true" />
-        ) : (
-          <PlayIcon size={29} weight="fill" aria-hidden="true" />
-        )}
-      </button>
+      {isVideo ? (
+        <button
+          className="round-control play-control"
+          type="button"
+          onClick={onTogglePlay}
+          aria-label={isPlaying ? "暂停预览" : "播放预览"}
+        >
+          {isPlaying ? (
+            <PauseIcon size={29} weight="fill" aria-hidden="true" />
+          ) : (
+            <PlayIcon size={29} weight="fill" aria-hidden="true" />
+          )}
+        </button>
+      ) : null}
 
       <span className="timecode">
         {isVideo ? `${formatTime(currentTime)} / ${formatTime(duration)}` : "静态图片"}
       </span>
 
-      <input
+      {isVideo ? <input
         className="progress-slider"
         type="range"
         min="0"
@@ -94,22 +95,20 @@ export function ControlDock({
         onChange={onSeek}
         style={{ "--progress": `${progress}%` }}
         aria-label="预览进度"
-        disabled={!isVideo}
-      />
+      /> : null}
 
-      <button
+      {isVideo ? <button
         className="round-control volume-control"
         type="button"
         onClick={onToggleMute}
-        disabled={!isVideo}
-        aria-label={!isVideo ? "静态图片没有声音" : muted ? "打开声音" : "静音"}
+        aria-label={muted ? "打开声音" : "静音"}
       >
         {muted ? (
           <SpeakerXIcon size={23} weight="regular" aria-hidden="true" />
         ) : (
           <SpeakerHighIcon size={26} weight="regular" aria-hidden="true" />
         )}
-      </button>
+      </button> : null}
 
       <button
         className="fullscreen-control"

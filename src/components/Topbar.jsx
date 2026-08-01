@@ -1,5 +1,6 @@
 import {
   ArrowCircleUpIcon,
+  SpinnerGapIcon,
   SquaresFourIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
@@ -46,8 +47,7 @@ export function Topbar({
   // hide them because browser users cannot update the desktop application.
   const showDesktopUpdateControls = isDesktop || import.meta.env.DEV;
   const showUpdatePill = showDesktopUpdateControls && pendingUpdate;
-  const showUpdateCheck =
-    showDesktopUpdateControls && !showUpdatePill && !isUpdateBusy && onCheckForUpdates;
+  const showUpdateCheck = showDesktopUpdateControls && !showUpdatePill && onCheckForUpdates;
 
   return (
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
@@ -93,14 +93,19 @@ export function Topbar({
         ) : null}
         {showUpdateCheck ? (
           <button
-            className="update-check-button"
+            className={`update-check-button ${isUpdateBusy ? "is-busy" : ""}`}
             type="button"
             onClick={onCheckForUpdates}
-            disabled={inert}
-            aria-label="检测更新"
+            disabled={inert || isUpdateBusy}
+            aria-label={isUpdateBusy ? "正在检查或安装更新" : "检测更新"}
+            aria-live="polite"
           >
-            <ArrowCircleUpIcon size={15} weight="regular" aria-hidden="true" />
-            检测更新
+            {isUpdateBusy ? (
+              <SpinnerGapIcon size={15} weight="bold" aria-hidden="true" />
+            ) : (
+              <ArrowCircleUpIcon size={15} weight="regular" aria-hidden="true" />
+            )}
+            <span>{updateState?.state === "checking" ? "检查中…" : "检测更新"}</span>
           </button>
         ) : null}
         <GlassSurface

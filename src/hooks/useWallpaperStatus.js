@@ -50,6 +50,7 @@ export function useWallpaperStatus() {
   const lastNoticeKeyRef = useRef(null);
   const applyInFlightRef = useRef(false);
   const lastApplyRequestRef = useRef(null);
+  const manualUpdateCheckRef = useRef(false);
 
   const showFeedback = useCallback((tone, message, options = {}) => {
     const source = options.source ?? "system";
@@ -240,10 +241,15 @@ export function useWallpaperStatus() {
 
   const handleCheckForUpdates = useCallback(async () => {
     lastNoticeKeyRef.current = null;
-    showFeedback("updating", "正在检查更新…", { source: "update", persistent: true });
+    manualUpdateCheckRef.current = true;
     try {
-      await checkForUpdatesDesktop();
+      const result = await checkForUpdatesDesktop();
+      if (result?.ok === false) {
+        manualUpdateCheckRef.current = false;
+        showFeedback("error", result.message ?? "检查更新失败", { source: "update" });
+      }
     } catch (error) {
+      manualUpdateCheckRef.current = false;
       showFeedback("error", error instanceof Error ? error.message : "检查更新失败", {
         source: "update",
       });
@@ -311,16 +317,13 @@ export function useWallpaperStatus() {
       } else if (state.state === "checking") {
         pendingUpdateRef.current = null;
         setPendingUpdate(null);
-        showFeedback("updating", state.message ?? "正在检查更新…", {
-          source: "update",
-          persistent: true,
-          updateState: state,
-        });
+        setFeedback((current) => (current?.source === "update" ? null : current));
       } else if (state.state === "idle") {
         pendingUpdateRef.current = null;
         setPendingUpdate(null);
         readyUpdateRef.current = null;
         if (state.lastError) {
+          manualUpdateCheckRef.current = false;
           const noticeKey = `idle-error:${state.lastError}`;
           if (noticeKey !== lastNoticeKeyRef.current) {
             lastNoticeKeyRef.current = noticeKey;
@@ -330,6 +333,12 @@ export function useWallpaperStatus() {
               updateState: state,
             });
           }
+        } else if (manualUpdateCheckRef.current) {
+          manualUpdateCheckRef.current = false;
+          showFeedback("success", "已是最新版本", {
+            source: "update",
+            duration: FEEDBACK_DURATION_DEFAULT_MS,
+          });
         }
       } else if (state.state === "unsupported") {
         pendingUpdateRef.current = null;
@@ -345,6 +354,7 @@ export function useWallpaperStatus() {
           updateState: state,
         });
       } else if (state.state === "error" && (state.message || state.lastError)) {
+        manualUpdateCheckRef.current = false;
         pendingUpdateRef.current = null;
         setPendingUpdate(null);
         readyUpdateRef.current = null;

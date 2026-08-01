@@ -136,6 +136,25 @@ body {
   transform: translateY(-1px);
 }
 
+.update-check-button.is-busy,
+.update-check-button.is-busy:disabled {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 0.82;
+  cursor: progress;
+  transform: none;
+}
+
+.update-check-button.is-busy svg {
+  animation: cinema-update-spin 900ms linear infinite;
+}
+
+@keyframes cinema-update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .topbar-categories {
   right: 45px;
   gap: clamp(25px, 2.8vw, 42px);
@@ -244,6 +263,19 @@ body {
   padding: 0;
 }
 
+.control-dock.is-static {
+  width: 230px;
+}
+
+.control-dock.is-static > .glass-surface__content {
+  justify-content: center;
+}
+
+.control-dock.is-static .timecode {
+  min-width: 92px;
+  text-align: center;
+}
+
 .control-dock::before,
 .control-dock::after {
   display: none !important;
@@ -297,13 +329,44 @@ body {
 }
 
 .fullscreen-control {
-  min-width: 58px;
-  width: 58px;
-  height: 36px;
-  margin: 0;
-  padding: 0 0 0 18px;
-  border-left: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 0;
+  position: relative;
+  min-width: 48px;
+  width: 48px;
+  height: 42px;
+  margin: 0 0 0 6px;
+  padding: 0;
+  border-radius: 12px;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.fullscreen-control::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: -12px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.fullscreen-control:hover,
+.fullscreen-control:focus-visible {
+  color: #ffffff;
+  background: rgba(119, 146, 158, 0.38) !important;
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.22),
+    0 0 0 2px rgba(103, 226, 236, 0.22);
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(14px) saturate(1.18);
+}
+
+.fullscreen-control:focus-visible {
+  outline: 2px solid #7cecf4;
+  outline-offset: 2px;
 }
 
 .fullscreen-icon {
@@ -319,12 +382,12 @@ body {
   z-index: 6;
   top: clamp(202px, 19.4vh, 222px);
   right: 38px;
-  min-width: 172px;
+  min-width: 146px;
   width: auto;
-  height: 54px;
-  padding: 0 18px;
+  height: 44px;
+  padding: 0 14px;
   border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 12px;
+  border-radius: 11px;
   color: rgba(251, 253, 250, 0.95);
   background: rgba(91, 56, 43, 0.18);
   box-shadow:
@@ -332,11 +395,16 @@ body {
     0 12px 30px rgba(0, 8, 12, 0.15);
   -webkit-backdrop-filter: blur(18px) saturate(1.25);
   backdrop-filter: blur(18px) saturate(1.25);
-  font-size: 15px;
+  font-size: 13px;
+}
+
+.apply-button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .apply-button.is-web-only {
-  min-width: 172px;
+  min-width: 146px;
   color: rgba(251, 253, 250, 0.95);
   background: rgba(91, 56, 43, 0.18);
   cursor: pointer;
@@ -398,10 +466,38 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.26);
   border-radius: 50%;
   color: rgba(250, 253, 253, 0.94);
-  background: rgba(14, 18, 21, 0.72);
+  background: rgba(86, 116, 132, 0.56);
   box-shadow: 0 12px 30px rgba(0, 8, 12, 0.18);
   -webkit-backdrop-filter: blur(24px) saturate(1.08);
   backdrop-filter: blur(24px) saturate(1.08);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    width 180ms ease;
+}
+
+.shelf-search .shelf-search-toggle,
+.shelf-search .shelf-search-toggle:hover {
+  color: inherit;
+  background: transparent !important;
+}
+
+.shelf-search:hover,
+.shelf-search:focus-within {
+  border-color: rgba(105, 237, 246, 0.82);
+  color: #ffffff;
+  background: rgba(86, 116, 132, 0.68);
+  box-shadow:
+    0 0 0 3px rgba(93, 229, 240, 0.13),
+    0 14px 34px rgba(0, 8, 12, 0.34);
+  transform: translateY(-2px);
+}
+
+.shelf-search .shelf-search-toggle:focus-visible {
+  outline: 2px solid #7cecf4;
+  outline-offset: 3px;
 }
 
 .shelf-search > svg {
@@ -412,6 +508,11 @@ body {
 .shelf-search.is-open {
   width: min(260px, 22vw);
   border-radius: 18px;
+  border-color: rgba(105, 237, 246, 0.62);
+  background: rgba(86, 116, 132, 0.68);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 14px 34px rgba(0, 8, 12, 0.3);
 }
 
 .shelf-search.is-open > svg {
@@ -421,6 +522,8 @@ body {
 
 .shelf-search-input {
   color: white;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .shelf-search-input::placeholder {
@@ -654,8 +757,8 @@ body {
   .apply-button {
     top: 96px;
     right: 20px;
-    min-width: 150px;
-    height: 48px;
+    min-width: 140px;
+    height: 44px;
   }
 
   .control-dock {
@@ -771,9 +874,10 @@ body {
   .apply-button {
     top: 82px;
     right: 14px;
-    min-width: 132px;
-    width: 132px;
-    padding-inline: 12px;
+    min-width: 122px;
+    width: 122px;
+    height: 42px;
+    padding-inline: 10px;
     font-size: 12px;
   }
 
