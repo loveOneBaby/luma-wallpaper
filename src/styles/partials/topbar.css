@@ -38,6 +38,30 @@
   pointer-events: auto;
 }
 
+.update-check-button {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: none;
+  color: rgba(9, 42, 52, 0.87);
+  background: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-check-button:hover {
+  filter: brightness(1.05);
+}
+
+.update-check-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .platforms {
   white-space: nowrap;
   padding-top: 1px;

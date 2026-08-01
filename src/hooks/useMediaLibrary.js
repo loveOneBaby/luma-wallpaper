@@ -178,6 +178,7 @@ function restoreItems(state, objectUrls) {
         isDemo: false,
         sourceKey: item.sourceKey ?? browserSourceKey(item.file, kind),
         file: item.file,
+        missing: false,
       });
       seenIds.add(item.id);
       continue;
@@ -196,6 +197,7 @@ function restoreItems(state, objectUrls) {
       isDemo: false,
       sourceKey: item.sourceKey ?? `desktop:${item.identity ?? filePath}`,
       filePath,
+      missing: item.missing === true,
     });
     seenIds.add(item.id);
   }

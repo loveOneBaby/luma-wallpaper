@@ -25,6 +25,7 @@ export interface LibraryItemState {
   demoKey?: string | null;
   sourceKey?: string;
   filePath?: string | null;
+  missing?: boolean;
   src?: string;
 }
 

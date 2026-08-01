@@ -45,6 +45,7 @@ export function App() {
     reopenUpdate,
     handleRetryUpdate,
     handleCheckForUpdates,
+    updateState,
     handleConfirmStartup,
   } = useWallpaperStatus();
 
@@ -216,6 +217,8 @@ export function App() {
         platformLabel={getPlatformLabel(platform)}
         pendingUpdate={pendingUpdate}
         onReopenUpdate={reopenUpdate}
+        onCheckForUpdates={handleCheckForUpdates}
+        updateState={updateState}
         isLibraryReady={isHydrated}
         inert={isFullscreen || isConflictOpen}
       />
@@ -288,6 +291,7 @@ export function App() {
         mediaKind={media.kind}
         platform={platform}
         applyState={applyState}
+        mediaMissing={media.missing}
         onApply={() => handleApplyWallpaper(media, false)}
         inert={isConflictOpen}
       />

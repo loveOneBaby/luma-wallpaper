@@ -37,6 +37,7 @@ export function useWallpaperStatus() {
   const [wallpaperRuntime, setWallpaperRuntime] = useState({ status: "stopped" });
   const [appliedMatchKey, setAppliedMatchKey] = useState(null);
   const [pendingUpdate, setPendingUpdate] = useState(null);
+  const [updateState, setUpdateState] = useState(null);
   const [isConflictOpen, setConflictOpen] = useState(
     () =>
       import.meta.env.DEV &&
@@ -146,6 +147,10 @@ export function useWallpaperStatus() {
       const request = force ? lastApplyRequestRef.current : createWallpaperApplySnapshot(media);
       if (!request) {
         showApplyStatus("error", "没有可重新应用的壁纸，请先选择并设置一个素材");
+        return;
+      }
+      if (!force && media?.missing) {
+        showApplyStatus("error", "当前文件已丢失，请先重新定位再设置");
         return;
       }
 
@@ -269,8 +274,10 @@ export function useWallpaperStatus() {
     lastNoticeKeyRef.current = null;
     const handleUpdateState = (state) => {
       if (!active || !state?.state) return;
+      setUpdateState(state);
       if (state.state === "available") {
         pendingUpdateRef.current = state;
+        readyUpdateRef.current = null;
         setPendingUpdate(state);
         showFeedback("success", state.message ?? "发现新版本", {
           source: "update",
@@ -278,6 +285,8 @@ export function useWallpaperStatus() {
           updateState: state,
         });
       } else if (state.state === "downloading") {
+        pendingUpdateRef.current = state;
+        setPendingUpdate(state);
         showFeedback("updating", state.message ?? "正在下载新版本…", {
           source: "update",
           persistent: true,
@@ -299,7 +308,33 @@ export function useWallpaperStatus() {
           persistent: true,
           updateState: state,
         });
+      } else if (state.state === "checking") {
+        pendingUpdateRef.current = null;
+        setPendingUpdate(null);
+        showFeedback("updating", state.message ?? "正在检查更新…", {
+          source: "update",
+          persistent: true,
+          updateState: state,
+        });
+      } else if (state.state === "idle") {
+        pendingUpdateRef.current = null;
+        setPendingUpdate(null);
+        readyUpdateRef.current = null;
+        if (state.lastError) {
+          const noticeKey = `idle-error:${state.lastError}`;
+          if (noticeKey !== lastNoticeKeyRef.current) {
+            lastNoticeKeyRef.current = noticeKey;
+            showFeedback("error", `更新检查失败：${state.lastError}`, {
+              source: "update",
+              duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
+              updateState: state,
+            });
+          }
+        }
       } else if (state.state === "unsupported") {
+        pendingUpdateRef.current = null;
+        setPendingUpdate(null);
+        readyUpdateRef.current = null;
         const message = state.message ?? "当前版本暂不支持自动更新，请手动下载安装新版本";
         const noticeKey = `unsupported:${state.reason ?? message}`;
         if (noticeKey === lastNoticeKeyRef.current) return;
@@ -309,16 +344,10 @@ export function useWallpaperStatus() {
           duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
           updateState: state,
         });
-      } else if (state.state === "idle" && state.lastError) {
-        const noticeKey = `idle-error:${state.lastError}`;
-        if (noticeKey === lastNoticeKeyRef.current) return;
-        lastNoticeKeyRef.current = noticeKey;
-        showFeedback("error", `更新检查失败：${state.lastError}`, {
-          source: "update",
-          duration: FEEDBACK_DURATION_UPDATE_ERROR_MS,
-          updateState: state,
-        });
       } else if (state.state === "error" && (state.message || state.lastError)) {
+        pendingUpdateRef.current = null;
+        setPendingUpdate(null);
+        readyUpdateRef.current = null;
         const message = state.message ?? state.lastError;
         const noticeKey = `error:${message}`;
         if (noticeKey === lastNoticeKeyRef.current) return;
@@ -426,5 +455,6 @@ export function useWallpaperStatus() {
     handleRetryUpdate,
     handleCheckForUpdates,
     handleConfirmStartup,
+    updateState,
   };
 }

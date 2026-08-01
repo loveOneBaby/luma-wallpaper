@@ -202,10 +202,20 @@ export function hydrateLibraryState(storedLibrary) {
           name: descriptor.name,
           filePath: descriptor.path,
           src: descriptor.url,
+          missing: false,
         },
       ];
     } catch {
-      return [];
+      return [
+        {
+          ...item,
+          kind: item.kind ?? null,
+          name: item.name || "未知素材",
+          filePath: item.filePath ?? null,
+          src: "",
+          missing: true,
+        },
+      ];
     }
   });
   const selectedId = items.some((item) => item.id === sanitized.selectedId)
@@ -266,4 +276,3 @@ export async function rememberLastApplied(media) {
 export async function clearLastApplied() {
   await updatePersistedState((current) => ({ ...current, lastApplied: null }));
 }
-
