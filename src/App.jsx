@@ -112,22 +112,19 @@ export function App() {
       } else {
         if (!stageRef.current?.requestFullscreen) throw new Error("fullscreen-unavailable");
         await stageRef.current.requestFullscreen();
-        setLibraryOpen(false);
       }
     } catch {
       showFeedback("warning", "无法进入全屏，请检查浏览器或系统权限", {
         source: "preview",
       });
     }
-  }, [setLibraryOpen, showFeedback]);
+  }, [showFeedback]);
 
-  // Esc closes the shelf; the modal owns its own Escape handling and focus
-  // trap. Space toggles video playback unless an interactive control is active.
+  // Escape is reserved for the browser's fullscreen exit and modal handling;
+  // it must never hide the media shelf. Space toggles video playback unless an
+  // interactive control is active.
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setLibraryOpen(false);
-      }
       if (event.code !== "Space" || isConflictOpen) return;
       if (event.target instanceof Element) {
         const interactive = event.target.closest(
@@ -140,7 +137,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isConflictOpen, setLibraryOpen, togglePlayback]);
+  }, [isConflictOpen, togglePlayback]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {

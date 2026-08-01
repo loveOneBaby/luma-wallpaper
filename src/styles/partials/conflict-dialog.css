@@ -135,8 +135,8 @@
 }
 
 .conflict-retry:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 11px 26px rgba(2, 49, 62, 0.26);
+  transform: none;
+  box-shadow: 0 8px 22px rgba(2, 49, 62, 0.2);
 }
 
 .conflict-retry:disabled {
@@ -224,12 +224,12 @@
 
 .web-download-link:hover,
 .web-download-link:focus-visible {
-  border-color: rgba(124, 236, 244, 0.82);
-  background: rgba(139, 166, 178, 0.58);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(235, 250, 251, 0.13);
   box-shadow:
-    0 0 0 3px rgba(93, 229, 240, 0.13),
-    0 10px 24px rgba(0, 8, 12, 0.22);
-  transform: translateY(-1px);
+    inset 0 1px rgba(255, 255, 255, 0.1),
+    0 8px 24px rgba(0, 12, 18, 0.08);
+  transform: none;
 }
 
 .web-download-link:focus-visible {

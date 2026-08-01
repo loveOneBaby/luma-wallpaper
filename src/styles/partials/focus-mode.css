@@ -1,6 +1,5 @@
 .is-focus-mode .topbar,
 .is-focus-mode .file-name,
-.is-focus-mode .media-shelf,
 .is-focus-mode .status-toast,
 .is-focus-mode .wallpaper-running,
 .is-focus-mode .wallpaper-recovery {
@@ -22,8 +21,8 @@
 }
 
 .is-focus-mode .control-dock {
-  opacity: 0;
-  transform: translate(-50%, 18px);
+  opacity: 1;
+  transform: translateX(-50%);
 }
 
 .is-focus-mode .control-dock:hover,
