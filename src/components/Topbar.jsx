@@ -1,4 +1,5 @@
 import {
+  ArrowCircleUpIcon,
   SquaresFourIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
@@ -23,11 +24,24 @@ export function Topbar({
   onCategoryChange,
   platformLabel,
   isLibraryReady = true,
+  isDesktop = false,
+  pendingUpdate = null,
+  onReopenUpdate,
+  onCheckForUpdates,
+  updateState,
   inert = false,
 }) {
   const currentCategory = CATEGORIES.some((category) => category.id === activeCategory)
     ? activeCategory
     : "all";
+
+  const isUpdateBusy =
+    updateState?.state === "checking" ||
+    updateState?.state === "downloading" ||
+    updateState?.state === "installing";
+
+  const showUpdatePill = isDesktop && pendingUpdate;
+  const showUpdateCheck = isDesktop && !showUpdatePill && !isUpdateBusy && onCheckForUpdates;
 
   return (
     <header className="topbar" aria-hidden={inert || undefined} inert={inert}>
@@ -54,9 +68,32 @@ export function Topbar({
             {category.label}
           </button>
         ))}
-        <SquaresFourIcon size={21} weight="regular" aria-hidden="true" />
       </nav>
       <div className="topbar-actions">
+        {showUpdatePill ? (
+          <button
+            className="update-pill"
+            type="button"
+            onClick={onReopenUpdate}
+            disabled={inert}
+            aria-label={`新版本${pendingUpdate.version ? ` v${pendingUpdate.version}` : ""} 可用，点击更新`}
+          >
+            <ArrowCircleUpIcon size={15} weight="bold" aria-hidden="true" />
+            新版本{pendingUpdate.version ? ` v${pendingUpdate.version}` : ""}
+          </button>
+        ) : null}
+        {showUpdateCheck ? (
+          <button
+            className="update-check-button"
+            type="button"
+            onClick={onCheckForUpdates}
+            disabled={inert}
+            aria-label="检测更新"
+          >
+            <ArrowCircleUpIcon size={15} weight="regular" aria-hidden="true" />
+            检测更新
+          </button>
+        ) : null}
         <GlassSurface
           {...GLASS_LIBRARY_BUTTON}
           as="button"

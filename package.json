@@ -1,6 +1,6 @@
 {
   "name": "luma-wallpaper",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "A calm image and video wallpaper manager for macOS, Windows, and the web.",
   "author": "Luma",
   "repository": {
@@ -90,6 +90,22 @@
       {
         "from": "src/assets/ocean-morning.png",
         "to": "demo-assets/ocean-morning.png"
+      },
+      {
+        "from": "src/assets/wallpapers/alpine-lake.png",
+        "to": "demo-assets/alpine-lake.png"
+      },
+      {
+        "from": "src/assets/wallpapers/sunlit-forest.png",
+        "to": "demo-assets/sunlit-forest.png"
+      },
+      {
+        "from": "src/assets/wallpapers/city-night.png",
+        "to": "demo-assets/city-night.png"
+      },
+      {
+        "from": "src/assets/wallpapers/misty-lake.png",
+        "to": "demo-assets/misty-lake.png"
       }
     ],
     "mac": {

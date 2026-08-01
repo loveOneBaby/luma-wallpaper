@@ -1,5 +1,4 @@
 import {
-  ArrowCircleUpIcon,
   CheckIcon,
   DownloadSimpleIcon,
   SpinnerGapIcon,
@@ -135,28 +134,7 @@ export function StatusToast({
       );
     }
 
-    if (!canManualCheck) return null;
-
-    return (
-      <GlassSurface
-        {...GLASS_STATUS_TOAST}
-        className="status-toast liquid-glass is-info"
-        role="status"
-        aria-hidden={inert || undefined}
-        inert={inert}
-      >
-        <ArrowCircleUpIcon size={18} weight="regular" aria-hidden="true" />
-        <span>更新检查</span>
-        <button
-          className="status-action status-update"
-          type="button"
-          onClick={onCheckForUpdates}
-          disabled={inert}
-        >
-          检测更新
-        </button>
-      </GlassSurface>
-    );
+    return null;
   }
 
   const isBusy = feedback.tone === "applying" || feedback.tone === "installing";

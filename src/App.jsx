@@ -216,6 +216,11 @@ export function App() {
         onCategoryChange={setActiveCategory}
         platformLabel={getPlatformLabel(platform)}
         isLibraryReady={isHydrated}
+        isDesktop={platform === "darwin" || platform === "win32"}
+        pendingUpdate={pendingUpdate}
+        onReopenUpdate={reopenUpdate}
+        onCheckForUpdates={handleCheckForUpdates}
+        updateState={updateState}
         inert={isFullscreen || isConflictOpen}
       />
 
@@ -294,56 +299,6 @@ export function App() {
         onApply={() => handleApplyWallpaper(media, false)}
         inert={isConflictOpen}
       />
-
-      {!isFullscreen ? (
-        <aside className="desktop-runtime-panel" aria-label="桌面壁纸运行状态">
-          <div className="desktop-runtime-card">
-            <div className="desktop-runtime-label">
-              <i aria-hidden="true" />
-              <span>
-                {platform === "darwin" || platform === "win32"
-                  ? wallpaperRuntime.status === "running" || wallpaperRuntime.status === "paused"
-                    ? "动态壁纸运行中"
-                    : "动态壁纸未运行"
-                  : "浏览器仅支持预览"}
-              </span>
-            </div>
-            <div className="desktop-runtime-actions">
-              <button
-                type="button"
-                disabled={platform !== "darwin" && platform !== "win32"}
-                onClick={
-                  wallpaperRuntime.status === "paused"
-                    ? handleResumeWallpaper
-                    : handlePauseWallpaper
-                }
-              >
-                {wallpaperRuntime.status === "paused" ? "继续" : "暂停"}
-              </button>
-              <button
-                type="button"
-                disabled={platform !== "darwin" && platform !== "win32"}
-                onClick={handleStopWallpaper}
-              >
-                停止
-              </button>
-            </div>
-          </div>
-          <button
-            className="desktop-recovery-link"
-            type="button"
-            onClick={() => {
-              if (platform === "darwin" || platform === "win32") {
-                setConflictOpen(true);
-              } else {
-                document.querySelector(".apply-button")?.click();
-              }
-            }}
-          >
-            {platform === "darwin" || platform === "win32" ? "未生效？" : "了解桌面端"}
-          </button>
-        </aside>
-      ) : null}
 
       {isConflictOpen ? (
         <ConflictDialog

@@ -28,6 +28,10 @@ export const consts = Object.freeze({
   DEMO_FILES_BY_KEY: new Map([
     ["ocean-morning-video", "ocean-morning.mp4"],
     ["ocean-morning-image", "ocean-morning.png"],
+    ["alpine-lake", "alpine-lake.png"],
+    ["sunlit-forest", "sunlit-forest.png"],
+    ["city-night", "city-night.png"],
+    ["misty-lake", "misty-lake.png"],
   ]),
 });
 

@@ -212,6 +212,7 @@ export function findDemoMedia(demoKey) {
   const directCandidates = [
     path.join(process.resourcesPath, "demo-assets", fileName),
     path.join(appRoot, "src", "assets", fileName),
+    path.join(appRoot, "src", "assets", "wallpapers", fileName),
   ];
   return directCandidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }

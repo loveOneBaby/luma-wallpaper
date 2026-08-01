@@ -266,69 +266,6 @@ body { background: #aebfc5; }
   cursor: pointer;
 }
 
-.desktop-runtime-panel {
-  position: fixed;
-  z-index: 7;
-  top: calc(25.2vh + 76px);
-  right: 2.8vw;
-  width: 194px;
-}
-.desktop-runtime-card {
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,.46);
-  border-radius: 10px;
-  background: rgba(241,246,245,.28);
-  box-shadow: inset 0 1px rgba(255,255,255,.42);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
-}
-.desktop-runtime-label {
-  height: 58px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(16,42,51,.13);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.desktop-runtime-label i {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--cyan);
-  box-shadow: 0 0 8px rgba(103,220,233,.55);
-}
-.desktop-runtime-actions {
-  height: 46px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.desktop-runtime-actions button {
-  border: 0;
-  color: var(--ink);
-  background: transparent;
-  font-size: 14px;
-  cursor: pointer;
-}
-.desktop-runtime-actions button + button {
-  border-left: 1px solid rgba(16,42,51,.14);
-}
-.desktop-runtime-actions button:disabled {
-  opacity: .58;
-  cursor: default;
-}
-.desktop-recovery-link {
-  margin-top: 13px;
-  padding: 0;
-  border: 0;
-  color: #3f819b;
-  background: transparent;
-  font-size: 14px;
-  cursor: pointer;
-}
-
 .media-shelf {
   left: 5.6vw;
   bottom: 19.4vh;
@@ -541,15 +478,6 @@ body { background: #aebfc5; }
     font-size: 15px;
   }
   .apply-button.is-web-only { min-width: 160px; }
-  .desktop-runtime-panel {
-    right: 24px;
-    width: 160px;
-  }
-  .desktop-runtime-label {
-    padding-inline: 10px;
-    font-size: 11px;
-  }
-  .desktop-recovery-link { font-size: 12px; }
   .media-shelf {
     bottom: 25vh;
     min-height: 184px;
@@ -629,5 +557,4 @@ body { background: #aebfc5; }
   .upload-button { left: auto; right: 28px; }
   .media-shelf { left: 4vw; width: 92vw; }
   .apply-button { top: auto; bottom: 20px; right: 24px; }
-  .desktop-runtime-panel { display: none; }
 }
