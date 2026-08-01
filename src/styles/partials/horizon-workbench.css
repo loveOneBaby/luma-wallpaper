@@ -39,6 +39,10 @@ body { background: #aebfc5; }
   backdrop-filter: blur(22px) saturate(1.15);
 }
 
+.topbar-current {
+  pointer-events: none;
+}
+
 .brand {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 42px;
@@ -71,6 +75,7 @@ body { background: #aebfc5; }
   display: flex;
   align-items: center;
   gap: 30px;
+  pointer-events: auto;
 }
 .topbar-categories button {
   height: 46px;

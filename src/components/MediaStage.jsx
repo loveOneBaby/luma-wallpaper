@@ -1,3 +1,6 @@
+import { ImageIcon } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+
 export function MediaStage({
   media,
   videoRef,
@@ -11,6 +14,12 @@ export function MediaStage({
   onVideoError,
   onImageError,
 }) {
+  const [mediaLoadFailed, setMediaLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setMediaLoadFailed(false);
+  }, [media.id, media.src, media.kind]);
+
   return (
     <div className="media-stage" role="group" aria-label={`${media.name} 预览`}>
       {isApplied ? (
@@ -43,14 +52,24 @@ export function MediaStage({
           ) : null}
         </>
       ) : (
-        <img
-          key={media.src}
-          className="wallpaper-media wallpaper-image"
-          src={media.src}
-          alt=""
-          decoding="async"
-          onError={onImageError}
-        />
+        (mediaLoadFailed ? (
+          <div className="wallpaper-image-fallback" aria-label="图片预览失败" role="status">
+            <ImageIcon size={28} weight="fill" aria-hidden="true" />
+            <span>图片预览失败</span>
+          </div>
+        ) : (
+          <img
+            key={media.src}
+            className="wallpaper-media wallpaper-image"
+            src={media.src}
+            alt=""
+            decoding="async"
+            onError={() => {
+              setMediaLoadFailed(true);
+              onImageError?.();
+            }}
+          />
+        ))
       )}
     </div>
   );

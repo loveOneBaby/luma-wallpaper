@@ -34,7 +34,7 @@ function cachePoster(key, poster) {
   }
 }
 
-function LazyVideoPreview({ item }) {
+function LazyVideoPreview({ item, onVideoError }) {
   const previewRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const posterKey = item.sourceKey ?? item.id;
@@ -102,9 +102,32 @@ function LazyVideoPreview({ item }) {
       }}
       onLoadedData={capturePoster}
       onSeeked={capturePoster}
+      onError={onVideoError}
       aria-hidden="true"
     />
   );
+}
+
+function MediaTileFallback({ kind }) {
+  return (
+    <span className="media-tile-fallback" aria-hidden="true">
+      <span className="media-tile-fallback-icon" aria-hidden="true">
+        {kind === "video" ? (
+          <VideoCameraIcon size={18} weight="fill" />
+        ) : (
+          <ImageIcon size={18} weight="fill" />
+        )}
+      </span>
+      <span className="media-tile-fallback-text">预览失败</span>
+    </span>
+  );
+}
+
+function StackTilePreview({ src }) {
+  const [isBroken, setIsBroken] = useState(false);
+  if (!src || isBroken) return null;
+
+  return <img src={src} alt="" onError={() => setIsBroken(true)} />;
 }
 
 const MediaTile = memo(function MediaTile({
@@ -118,6 +141,14 @@ const MediaTile = memo(function MediaTile({
   onRelocate,
   disabled,
 }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [item.id, item.src, item.kind, disabled]);
+
+  const showFallback = previewFailed || !item.src;
+
   return (
     <article className={`media-tile ${isSelected ? "is-selected" : ""} ${isApplied ? "is-applied" : ""} ${missing ? "is-missing" : ""}`}>
       {isApplied || (item.isDemo && isSelected) ? (
@@ -135,15 +166,29 @@ const MediaTile = memo(function MediaTile({
         aria-label={`预览 ${item.name}`}
       >
         {item.kind === "video" ? (
-          <LazyVideoPreview item={item} />
+          showFallback ? (
+            <MediaTileFallback kind="video" />
+          ) : (
+            <LazyVideoPreview
+              item={item}
+              onVideoError={() => {
+                setPreviewFailed(true);
+              }}
+            />
+          )
         ) : (
-          <img
-            className="media-tile-preview"
-            src={item.src}
-            alt=""
-            loading="lazy"
-            decoding="async"
-          />
+          showFallback ? (
+            <MediaTileFallback kind="image" />
+          ) : (
+            <img
+              className="media-tile-preview"
+              src={item.src}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setPreviewFailed(true)}
+            />
+          )
         )}
         <span className="media-kind-badge" aria-hidden="true">
           {item.kind === "video" ? (
@@ -426,12 +471,12 @@ export const MediaShelf = memo(function MediaShelf({
       )}
       <div className="media-stack-row media-stack-row-one" aria-hidden="true">
         {visibleItems.slice(1, 7).map((item) => (
-          <img key={`stack-one-${item.id}`} src={item.poster ?? item.src} alt="" />
+          <StackTilePreview key={`stack-one-${item.id}`} src={item.poster ?? item.src} />
         ))}
       </div>
       <div className="media-stack-row media-stack-row-two" aria-hidden="true">
         {[...visibleItems].reverse().slice(0, 6).map((item) => (
-          <img key={`stack-two-${item.id}`} src={item.poster ?? item.src} alt="" />
+          <StackTilePreview key={`stack-two-${item.id}`} src={item.poster ?? item.src} />
         ))}
       </div>
     </GlassSurface>
