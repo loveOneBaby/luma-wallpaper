@@ -30,12 +30,12 @@
     "desktop:build:win": "npm run build && electron-builder --win --x64"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.2.8",
+    "@fontsource/inter": "^5.3.0",
     "@phosphor-icons/react": "^2.1.10",
     "electron-updater": "^6.8.9",
-    "koffi": "^3.1.1",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "koffi": "^3.1.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "wallpaper": "^7.3.1"
   },
   "devDependencies": {
@@ -43,16 +43,16 @@
     "@vitejs/plugin-react": "5.0.4",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
-    "electron": "^43.1.0",
+    "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "globals": "^15.0.0",
-    "prettier": "^3.3.0",
+    "prettier": "^3.9.6",
     "vite": "^6.4.3",
-    "wait-on": "^9.0.10"
+    "wait-on": "^9.1.0"
   },
   "build": {
     "appId": "com.luma.wallpaper",
