@@ -146,11 +146,63 @@
 
 /* P2-7: web download dialog */
 
+.web-download-layer {
+  position: fixed;
+  padding: 20px;
+  background: rgba(30, 52, 65, 0.22);
+}
+
+.web-download-panel {
+  width: min(460px, calc(100vw - 40px));
+  min-height: 0;
+  display: block;
+  padding: 26px;
+  border-radius: 24px;
+  color: rgba(248, 253, 253, 0.96);
+  background: rgba(86, 116, 132, 0.58);
+  -webkit-backdrop-filter: blur(28px) saturate(1.16);
+  backdrop-filter: blur(28px) saturate(1.16);
+}
+
+.web-download-panel > .glass-surface__content {
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  display: block;
+}
+
+.web-download-panel .conflict-copy {
+  width: 100%;
+  padding: 0 38px 0 0;
+  writing-mode: horizontal-tb;
+}
+
+.web-download-panel .conflict-eyebrow {
+  color: rgba(232, 248, 250, 0.68);
+}
+
+.web-download-panel .conflict-copy h2 {
+  margin-bottom: 10px;
+  color: #ffffff;
+  font-size: 23px;
+  line-height: 1.25;
+  writing-mode: horizontal-tb;
+}
+
+.web-download-panel .conflict-copy p {
+  width: auto;
+  max-width: none;
+  color: rgba(242, 251, 252, 0.82);
+  font-size: 13px;
+  line-height: 1.7;
+  writing-mode: horizontal-tb;
+}
+
 .web-download-actions {
-  grid-column: 1 / -1;
   display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 20px;
 }
 
 .web-download-link {
@@ -162,13 +214,24 @@
   border-radius: 16px;
   font-size: 15px;
   font-weight: 600;
-  color: #04303a;
-  background: rgba(111, 242, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: #ffffff;
+  background: rgba(119, 146, 158, 0.48);
   text-decoration: none;
   cursor: pointer;
   transition: background 0.18s;
 }
 
-.web-download-link:hover {
-  background: rgba(111, 242, 255, 0.8);
+.web-download-link:hover,
+.web-download-link:focus-visible {
+  border-color: rgba(124, 236, 244, 0.82);
+  background: rgba(139, 166, 178, 0.58);
+  box-shadow:
+    0 0 0 3px rgba(93, 229, 240, 0.13),
+    0 10px 24px rgba(0, 8, 12, 0.22);
+  transform: translateY(-1px);
+}
+
+.web-download-link:focus-visible {
+  outline: none;
 }

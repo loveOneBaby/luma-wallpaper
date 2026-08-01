@@ -8,7 +8,7 @@ export function WebDownloadDialog({ open, onClose, inert = false }) {
   if (!open) return null;
   return (
     <div
-      className="conflict-layer"
+      className="conflict-layer web-download-layer"
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) onClose();
       }}
