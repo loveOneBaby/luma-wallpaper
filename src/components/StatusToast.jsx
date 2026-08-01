@@ -1,4 +1,5 @@
 import {
+  ArrowCircleUpIcon,
   CheckIcon,
   DownloadSimpleIcon,
   SpinnerGapIcon,
@@ -17,10 +18,13 @@ export function StatusToast({
   onStopWallpaper,
   onPauseWallpaper,
   onResumeWallpaper,
+  pendingUpdate,
+  onReopenUpdate,
   onInstallUpdate,
   onDismissUpdate,
   onRetryUpdate,
   onCheckForUpdates,
+  updateState,
   onUndoRemove,
   onConfirmStartup,
   inert = false,
@@ -29,6 +33,14 @@ export function StatusToast({
   const showPersistentRecovery = hasWallpaperRecovery && isDesktop;
   const runtimeActive =
     isDesktop && (wallpaperRuntime.status === "running" || wallpaperRuntime.status === "paused");
+
+  const canManualCheck =
+    Boolean(onCheckForUpdates)
+    && isDesktop
+    && updateState?.supported !== false
+    && updateState?.state !== "checking"
+    && updateState?.state !== "downloading"
+    && updateState?.state !== "installing";
 
   if (!feedback?.message) {
     if (runtimeActive) {
@@ -77,21 +89,72 @@ export function StatusToast({
         </GlassSurface>
       );
     }
-    if (!showPersistentRecovery) return null;
+
+    if (pendingUpdate) {
+      return (
+      <GlassSurface
+        {...GLASS_STATUS_TOAST}
+        className="status-toast liquid-glass is-success"
+        role="status"
+        aria-hidden={inert || undefined}
+        inert={inert}
+      >
+        <DownloadSimpleIcon size={19} weight="bold" aria-hidden="true" />
+        <span>
+          {pendingUpdate.message ??
+            `新版本${pendingUpdate.version ? ` v${pendingUpdate.version}` : ""} 可用`}
+        </span>
+        <button
+          className="status-action status-update"
+          type="button"
+          onClick={onReopenUpdate ?? onInstallUpdate}
+          disabled={inert}
+        >
+          更新
+        </button>
+      </GlassSurface>
+    );
+  }
+
+    if (showPersistentRecovery) {
+      return (
+        <GlassSurface
+          {...GLASS_STATUS_TOAST}
+          as="button"
+          className="wallpaper-recovery liquid-glass"
+          type="button"
+          onClick={onReportConflict}
+          aria-label="壁纸未生效，打开恢复帮助"
+          aria-hidden={inert || undefined}
+          inert={inert}
+          disabled={inert}
+        >
+          <WarningCircleIcon size={15} weight="regular" aria-hidden="true" />
+          <span>未生效？</span>
+        </GlassSurface>
+      );
+    }
+
+    if (!canManualCheck) return null;
+
     return (
       <GlassSurface
         {...GLASS_STATUS_TOAST}
-        as="button"
-        className="wallpaper-recovery liquid-glass"
-        type="button"
-        onClick={onReportConflict}
-        aria-label="壁纸未生效，打开恢复帮助"
+        className="status-toast liquid-glass is-info"
+        role="status"
         aria-hidden={inert || undefined}
         inert={inert}
-        disabled={inert}
       >
-        <WarningCircleIcon size={15} weight="regular" aria-hidden="true" />
-        <span>未生效？</span>
+        <ArrowCircleUpIcon size={18} weight="regular" aria-hidden="true" />
+        <span>更新检查</span>
+        <button
+          className="status-action status-update"
+          type="button"
+          onClick={onCheckForUpdates}
+          disabled={inert}
+        >
+          检测更新
+        </button>
       </GlassSurface>
     );
   }
@@ -113,6 +176,9 @@ export function StatusToast({
     feedback.source === "update"
     && Boolean(feedback.updateState)
     && (feedback.tone === "error" || feedback.tone === "warning");
+  const showManualCheckAction = canManualCheck && !["update", "wallpaper", "wallpaper-runtime", "startup"].includes(
+    feedback.source,
+  );
 
   return (
     <GlassSurface
@@ -178,6 +244,11 @@ export function StatusToast({
             稍后
           </button>
         </>
+      ) : null}
+      {showManualCheckAction ? (
+        <button className="status-action status-update" type="button" onClick={onCheckForUpdates}>
+          检测更新
+        </button>
       ) : null}
     </GlassSurface>
   );

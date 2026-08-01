@@ -165,8 +165,8 @@
 
 .media-stage .applied-badge {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: 104px;
+  left: 32px;
 }
 
 .media-tile.is-applied .media-tile-select {
@@ -174,20 +174,39 @@
 }
 
 .wallpaper-running {
+  position: absolute;
+  z-index: 8;
+  top: 104px;
+  left: 50%;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   padding: 8px 14px;
+  transform: translateX(-50%);
+  border-radius: 999px;
   font-size: 13px;
   font-weight: 500;
   color: #04303a;
+  animation: toast-arrive 220ms ease both;
+}
+
+.wallpaper-running > .glass-surface__content {
+  width: auto;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .wallpaper-running .status-action {
+  min-height: 32px;
   font-size: 12px;
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 14px;
+  padding: 0 10px;
+  border-radius: 999px;
   border: none;
   background: rgba(111, 242, 255, 0.22);
   color: #04303a;

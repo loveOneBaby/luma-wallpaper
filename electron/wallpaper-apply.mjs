@@ -14,6 +14,7 @@ import {
   mediaKind,
   mediaDescriptor,
   findDemoMedia,
+  resolveMediaTokenPath,
   settlePlayback,
   waitForPlayback,
   loadWallpaperModule,
@@ -26,16 +27,23 @@ export function resolveMediaRequest(request) {
     throw new Error("缺少壁纸文件");
   }
 
-  let filePath = null;
   let isDemo = false;
-  if (typeof request.path === "string" && request.path.trim()) {
-    const requestedPath = request.path.trim();
-    filePath = requestedPath.startsWith("file:")
-      ? fileURLToPath(requestedPath)
-      : path.resolve(requestedPath);
-  } else if (request.demoKey) {
+  let filePath = null;
+
+  if (request.demoKey) {
     filePath = findDemoMedia(request.demoKey);
     isDemo = true;
+  } else {
+    const requestedPaths = collectCandidatePaths(request.path, request.src, request.filePath);
+    const tried = new Set();
+    for (const candidate of requestedPaths) {
+      if (tried.has(candidate)) continue;
+      tried.add(candidate);
+      const resolved = resolveCandidatePath(candidate);
+      if (!resolved) continue;
+      filePath = resolved;
+      break;
+    }
   }
 
   if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
@@ -50,6 +58,74 @@ export function resolveMediaRequest(request) {
     throw new Error("该文件尚未通过 Luma 的选择或拖放授权");
   }
   return { ...mediaDescriptor(filePath), kind, demoKey: request.demoKey ?? null };
+}
+
+function collectCandidatePaths(...candidates) {
+  const requestedPaths = [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+
+    requestedPaths.push(trimmed);
+    if (trimmed.startsWith("file:")) {
+      requestedPaths.push(trimmed);
+    } else {
+      requestedPaths.push(path.resolve(trimmed));
+    }
+    if (trimmed.includes("%")) {
+      try {
+        const decoded = decodeURIComponent(trimmed);
+        requestedPaths.push(decoded);
+        requestedPaths.push(path.resolve(decoded));
+      } catch {
+        // Non-URI strings.
+      }
+    }
+
+    const tokenPath = resolveMediaTokenPath(trimmed);
+    if (tokenPath) requestedPaths.push(tokenPath);
+  }
+  return requestedPaths;
+}
+
+function resolveCandidatePath(candidate) {
+  if (!candidate || typeof candidate !== "string") return null;
+
+  const normalized = candidate.trim();
+  if (!normalized) return null;
+  const candidates = [];
+  if (normalized.startsWith("file:")) {
+    try {
+      candidates.push(fileURLToPath(normalized));
+    } catch {
+      // 不可解析的 file URL
+    }
+  } else {
+    candidates.push(path.resolve(normalized));
+  }
+  if (normalized.includes("%")) {
+    try {
+      const decoded = decodeURIComponent(normalized);
+      candidates.push(decoded);
+      candidates.push(path.resolve(decoded));
+    } catch {
+      // 非标准 URI 编码
+    }
+  }
+  const tokenPath = resolveMediaTokenPath(normalized);
+  if (tokenPath) candidates.push(tokenPath);
+
+  for (const candidatePath of candidates) {
+    if (typeof candidatePath !== "string") continue;
+    try {
+      const realPath = fs.realpathSync.native(candidatePath);
+      if (fs.statSync(realPath).isFile()) return realPath;
+    } catch {
+      // Fall through to next candidate.
+    }
+  }
+  return null;
 }
 
 export function clearPlaybackTracking(token, result = null) {
@@ -397,4 +473,3 @@ export function dependencyMessage(error) {
   }
   return message;
 }
-

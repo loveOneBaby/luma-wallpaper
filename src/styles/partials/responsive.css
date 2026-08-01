@@ -9,6 +9,11 @@
     padding: 20px 20px 0;
   }
 
+  .media-stage .applied-badge {
+    top: 88px;
+    left: 20px;
+  }
+
   .platforms {
     display: none;
   }
@@ -165,12 +170,20 @@
     height: 104px;
   }
 
-  .status-toast {
+  .status-toast,
+  .wallpaper-running,
+  .wallpaper-recovery {
     top: 82px;
   }
 
-  .wallpaper-recovery {
-    top: 82px;
+  .wallpaper-running > .glass-surface__content {
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .app-shell:has(> .wallpaper-running) > .media-stage .applied-badge {
+    top: 138px;
   }
 
   .status-toast {
@@ -308,9 +321,19 @@
     width: calc(100vw - 12px);
   }
 
+  .media-stage .applied-badge {
+    top: 72px;
+    left: 12px;
+  }
+
   .status-toast,
+  .wallpaper-running,
   .wallpaper-recovery {
     top: 72px;
+  }
+
+  .app-shell:has(> .wallpaper-running) > .media-stage .applied-badge {
+    top: 128px;
   }
 }
 
@@ -371,8 +394,19 @@
     overflow: hidden;
   }
 
+  .media-stage .applied-badge {
+    top: 68px;
+  }
+
   .status-toast,
+  .wallpaper-running,
   .wallpaper-recovery {
     top: 68px;
+  }
+}
+
+@media (max-width: 590px) and (max-height: 620px) {
+  .app-shell:has(> .wallpaper-running) > .media-stage .applied-badge {
+    top: 124px;
   }
 }

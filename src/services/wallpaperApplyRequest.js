@@ -1,4 +1,4 @@
-const APPLY_REQUEST_FIELDS = ["kind", "filePath", "demoKey", "name"];
+const APPLY_REQUEST_FIELDS = ["kind", "filePath", "demoKey", "name", "src"];
 
 /**
  * Capture only the stable fields needed to repeat a wallpaper request. Library

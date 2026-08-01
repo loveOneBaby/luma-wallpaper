@@ -76,7 +76,7 @@ export async function applyDesktopWallpaper(media, { force = false } = {}) {
     };
   }
 
-  if (!media.filePath && !media.demoKey) {
+  if (!media.demoKey && !media.filePath && !media.src) {
     return {
       status: "error",
       message: "请通过桌面端的上传按钮重新选择这个文件",
@@ -85,7 +85,8 @@ export async function applyDesktopWallpaper(media, { force = false } = {}) {
 
   try {
     const result = await bridge.setWallpaper({
-      path: media.filePath ?? null,
+      path: media.filePath ?? media.src ?? null,
+      src: media.src ?? null,
       kind: media.kind,
       demoKey: media.demoKey ?? null,
       force,

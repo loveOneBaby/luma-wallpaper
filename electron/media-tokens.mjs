@@ -115,6 +115,21 @@ export function mediaUrl(filePath) {
   return `luma-media://local/${token}/${encodeURIComponent(path.basename(filePath))}`;
 }
 
+export function resolveMediaTokenPath(rawPath) {
+  if (typeof rawPath !== "string") return null;
+  const trimmed = rawPath.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("luma-media://")) return null;
+  try {
+    const requestUrl = new URL(trimmed);
+    const [, token] = requestUrl.pathname.split("/");
+    const mediaEntry = state.mediaFilesByToken.get(token);
+    return mediaEntry?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function mediaDescriptor(filePath) {
   return {
     path: filePath,
@@ -200,4 +215,3 @@ export function findDemoMedia(demoKey) {
   ];
   return directCandidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
-

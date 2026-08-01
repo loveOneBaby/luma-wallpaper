@@ -215,10 +215,6 @@ export function App() {
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
         platformLabel={getPlatformLabel(platform)}
-        pendingUpdate={pendingUpdate}
-        onReopenUpdate={reopenUpdate}
-        onCheckForUpdates={handleCheckForUpdates}
-        updateState={updateState}
         isLibraryReady={isHydrated}
         inert={isFullscreen || isConflictOpen}
       />
@@ -247,10 +243,13 @@ export function App() {
         onStopWallpaper={handleStopWallpaper}
         onPauseWallpaper={handlePauseWallpaper}
         onResumeWallpaper={handleResumeWallpaper}
+        pendingUpdate={pendingUpdate}
+        onReopenUpdate={reopenUpdate}
         onInstallUpdate={handleInstallUpdate}
         onDismissUpdate={dismissUpdate}
         onRetryUpdate={handleRetryUpdate}
         onCheckForUpdates={handleCheckForUpdates}
+        updateState={updateState}
         onUndoRemove={undoRemove}
         onConfirmStartup={handleConfirmStartup}
         inert={isFullscreen || isConflictOpen}

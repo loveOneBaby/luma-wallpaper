@@ -1,6 +1,4 @@
 import {
-  ArrowCircleUpIcon,
-  ArrowsClockwiseIcon,
   SquaresFourIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react";
@@ -24,10 +22,6 @@ export function Topbar({
   activeCategory = "all",
   onCategoryChange,
   platformLabel,
-  pendingUpdate = null,
-  onReopenUpdate,
-  onCheckForUpdates,
-  updateState = null,
   isLibraryReady = true,
   inert = false,
 }) {
@@ -63,42 +57,6 @@ export function Topbar({
         <SquaresFourIcon size={21} weight="regular" aria-hidden="true" />
       </nav>
       <div className="topbar-actions">
-        {onCheckForUpdates ? (
-          <button
-            className="update-check-button"
-            type="button"
-            onClick={onCheckForUpdates}
-            disabled={
-              updateState?.state === "checking"
-              || updateState?.state === "downloading"
-              || updateState?.state === "installing"
-            }
-            aria-label="手动检查更新"
-            title={
-              updateState?.state === "checking" ? "正在检查更新，请稍候" : "手动检查是否有新版本"
-            }
-          >
-            <ArrowsClockwiseIcon
-              size={17}
-              weight="regular"
-              aria-hidden="true"
-            />
-            <span>检测更新</span>
-          </button>
-        ) : null}
-        {pendingUpdate ? (
-          <GlassSurface
-            {...GLASS_LIBRARY_BUTTON}
-            as="button"
-            className="update-pill liquid-glass"
-            type="button"
-            onClick={onReopenUpdate}
-            aria-label={`新版本${pendingUpdate.version ? ` v${pendingUpdate.version}` : ""} 可用`}
-          >
-            <ArrowCircleUpIcon size={18} weight="regular" aria-hidden="true" />
-            <span>新版本{pendingUpdate.version ? ` v${pendingUpdate.version}` : ""}</span>
-          </GlassSurface>
-        ) : null}
         <GlassSurface
           {...GLASS_LIBRARY_BUTTON}
           as="button"

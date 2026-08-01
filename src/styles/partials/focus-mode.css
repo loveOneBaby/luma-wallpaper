@@ -2,6 +2,7 @@
 .is-focus-mode .file-name,
 .is-focus-mode .media-shelf,
 .is-focus-mode .status-toast,
+.is-focus-mode .wallpaper-running,
 .is-focus-mode .wallpaper-recovery {
   opacity: 0;
   pointer-events: none;

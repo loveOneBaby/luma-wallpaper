@@ -21,6 +21,7 @@ test("wallpaper recovery snapshot is immutable and independent from library sele
     filePath: "/wallpapers/first.mp4",
     demoKey: null,
     name: "first.mp4",
+    src: "blob:first",
   });
   assert.equal(Object.isFrozen(snapshot), true);
   assert.throws(() => {
